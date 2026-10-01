@@ -33,6 +33,7 @@
         </q-scroll-area>
       </div>
 
+<<<<<<< Updated upstream
       <!-- Channels Column (240px) -->
       <div class="channel-sidebar col" style="height: 100%;">
         <!-- Sidebar Header -->
@@ -98,6 +99,14 @@
           </div>
         </q-scroll-area>
       </div>
+=======
+    <q-drawer v-model="leftDrawerOpen" show-if-above bordered>
+      <q-list>
+        <q-item-label header> Essential Links </q-item-label>
+
+        <EssentialLink v-for="link in linksList" :key="link.label" v-bind="link" />
+      </q-list>
+>>>>>>> Stashed changes
     </q-drawer>
 
     <q-page-container>

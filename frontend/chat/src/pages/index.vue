@@ -20,9 +20,22 @@
             <q-separator dark class="q-mx-md" style="width: 32px" />
 
             <!-- Mock Servers -->
-            <div class="server-icon-wrapper" v-for="i in 5" :key="i">
-              <q-btn round unelevated color="grey-8" class="server-btn" size="md">
-                {{ ['D', 'S', 'G', 'M', 'A'][i-1] }}
+            <div
+              class="server-icon-wrapper"
+              :class="{ 'server-active': server.id === selectedServerId }"
+              v-for="server in servers"
+              :key="server.id"
+            >
+              <q-btn
+                round
+                unelevated
+                :color="server.id === selectedServerId ? 'primary' : 'grey-8'"
+                class="server-btn"
+                size="md"
+                :title="server.name"
+                @click="selectServer(server.id)"
+              >
+                {{ server.name.charAt(0).toUpperCase() }}
               </q-btn>
             </div>
             
@@ -37,7 +50,7 @@
       <div class="channel-sidebar col" style="height: 100%;">
         <!-- Sidebar Header -->
         <div class="channel-header flex items-center justify-between q-px-md cursor-pointer">
-          <div class="text-weight-bold">Môj Server</div>
+          <div class="text-weight-bold ellipsis">{{ selectedServer.name }}</div>
           <q-icon name="expand_more" size="sm" />
         </div>
 
@@ -127,27 +140,82 @@ interface Channel {
   isAdmin: boolean;
 }
 
-const channels = ref<Channel[]>([
-  { id: 1, name: 'všeobecný', type: 'public', isInvited: false, isAdmin: false },
-  { id: 2, name: 'tajný-vývoj', type: 'private', isInvited: false, isAdmin: true },
-  { id: 3, name: 'nová-kampaň', type: 'public', isInvited: true, isAdmin: false }, // Pozvánka (topovaná a zvýraznená)
-  { id: 4, name: 'off-topic', type: 'public', isInvited: false, isAdmin: true },
+interface Server {
+  id: number;
+  name: string;
+  channels: Channel[];
+}
+
+const servers = ref<Server[]>([
+  {
+    id: 1,
+    name: 'Dev Tím',
+    channels: [
+      { id: 1, name: 'všeobecný', type: 'public', isInvited: false, isAdmin: false },
+      { id: 2, name: 'tajný-vývoj', type: 'private', isInvited: false, isAdmin: true },
+      { id: 3, name: 'nová-kampaň', type: 'public', isInvited: true, isAdmin: false }, // Pozvánka (topovaná a zvýraznená)
+      { id: 4, name: 'off-topic', type: 'public', isInvited: false, isAdmin: true },
+    ],
+  },
+  {
+    id: 2,
+    name: 'Škola',
+    channels: [
+      { id: 5, name: 'oznamy', type: 'public', isInvited: false, isAdmin: false },
+      { id: 6, name: 'vpwa', type: 'public', isInvited: false, isAdmin: false },
+      { id: 7, name: 'projekt-tím', type: 'private', isInvited: false, isAdmin: true },
+    ],
+  },
+  {
+    id: 3,
+    name: 'Gaming',
+    channels: [
+      { id: 8, name: 'lobby', type: 'public', isInvited: false, isAdmin: true },
+      { id: 9, name: 'turnaj', type: 'public', isInvited: true, isAdmin: false },
+      { id: 10, name: 'clips', type: 'public', isInvited: false, isAdmin: false },
+    ],
+  },
+  {
+    id: 4,
+    name: 'Muzika',
+    channels: [
+      { id: 11, name: 'odporúčania', type: 'public', isInvited: false, isAdmin: false },
+      { id: 12, name: 'playlisty', type: 'public', isInvited: false, isAdmin: false },
+    ],
+  },
+  {
+    id: 5,
+    name: 'Anime Klub',
+    channels: [
+      { id: 13, name: 'diskusia', type: 'public', isInvited: false, isAdmin: false },
+      { id: 14, name: 'spoilery', type: 'private', isInvited: false, isAdmin: true },
+    ],
+  },
 ]);
 
+const selectedServerId = ref(servers.value[0]!.id);
+const selectedServer = computed(
+  () => servers.value.find(s => s.id === selectedServerId.value) ?? servers.value[0]!
+);
+
+function selectServer(id: number) {
+  selectedServerId.value = id;
+}
+
 // Computed vlastnosti pre rozdelenie zoznamu
-const invitedChannels = computed(() => channels.value.filter(c => c.isInvited));
-const regularChannels = computed(() => channels.value.filter(c => !c.isInvited));
+const invitedChannels = computed(() => selectedServer.value.channels.filter(c => c.isInvited));
+const regularChannels = computed(() => selectedServer.value.channels.filter(c => !c.isInvited));
 
 // --- Akcie pre kanály ---
 async function createChannel() {
   const name = prompt('Názov nového kanála:');
   if (!name) return;
-  
+
   const isPrivate = confirm('Má byť kanál súkromný? (OK = Áno, Zrušiť = Nie)');
   
   const formattedName = name.toLowerCase().replace(/\s+/g, '-');
-  
-  channels.value.push({
+
+  selectedServer.value.channels.push({
     id: Date.now(),
     name: formattedName,
     type: isPrivate ? 'private' : 'public',
@@ -161,14 +229,19 @@ async function createChannel() {
 
 function leaveChannel(id: number) {
   if (confirm('Naozaj chceš opustiť tento kanál?')) {
-    channels.value = channels.value.filter(c => c.id !== id);
+    removeChannel(id);
   }
 }
 
 function deleteChannel(id: number) {
   if (confirm('Naozaj chceš zmazať tento kanál? Ako správca ho vymažeš natrvalo.')) {
-    channels.value = channels.value.filter(c => c.id !== id);
+    removeChannel(id);
   }
+}
+
+function removeChannel(id: number) {
+  const server = selectedServer.value;
+  server.channels = server.channels.filter(c => c.id !== id);
 }
 </script>
 
@@ -200,8 +273,25 @@ function deleteChannel(id: number) {
 }
 
 .server-btn:hover {
-  border-radius: 16px; 
+  border-radius: 16px;
   background-color: #5865F2 !important;
+}
+
+/* Aktívny server - zaoblený štvorec + indikátor vľavo */
+.server-active .server-btn {
+  border-radius: 16px;
+}
+
+.server-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 40px;
+  border-radius: 0 4px 4px 0;
+  background-color: #fff;
 }
 
 /* Channel Header */

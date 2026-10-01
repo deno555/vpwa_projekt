@@ -37,6 +37,7 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       Record<never, never>,
       | '//(index)'
+      | '//[channelId]'
       | '//second'
     >,
     '//(index)': RouteRecordInfo<
@@ -44,6 +45,13 @@ declare module 'vue-router/auto-routes' {
       '/',
       Record<never, never>,
       Record<never, never>,
+      | never
+    >,
+    '//[channelId]': RouteRecordInfo<
+      '//[channelId]',
+      '/:channelId',
+      { channelId: ParamValue<true> },
+      { channelId: ParamValue<false> },
       | never
     >,
     '//second': RouteRecordInfo<
@@ -91,6 +99,7 @@ declare module 'vue-router/auto-routes' {
       routes:
         | '/'
         | '//(index)'
+        | '//[channelId]'
         | '//second'
       views:
         | 'default'
@@ -104,6 +113,14 @@ declare module 'vue-router/auto-routes' {
         | never
       pathParamNames:
         | never
+    }
+    'src/pages/index/[channelId].vue': {
+      routes:
+        | '//[channelId]'
+      views:
+        | never
+      pathParamNames:
+        | 'channelId'
     }
     'src/pages/index/second.vue': {
       routes:

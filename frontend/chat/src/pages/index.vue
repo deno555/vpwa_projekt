@@ -33,7 +33,6 @@
         </q-scroll-area>
       </div>
 
-<<<<<<< Updated upstream
       <!-- Channels Column (240px) -->
       <div class="channel-sidebar col" style="height: 100%;">
         <!-- Sidebar Header -->
@@ -53,7 +52,10 @@
                   :key="channel.id" 
                   clickable 
                   v-ripple
+                  :to="'/' + channel.name"
+                  exact
                   class="channel-item invite-highlight q-mt-xs rounded-borders"
+                  active-class="text-white bg-grey-9"
                 >
                   <q-item-section avatar style="min-width: 30px; padding-right: 0;">
                     <q-icon :name="channel.type === 'private' ? 'lock' : 'tag'" size="xs" color="primary" />
@@ -77,6 +79,8 @@
                 :key="channel.id" 
                 clickable 
                 v-ripple
+                :to="'/' + channel.name"
+                exact
                 class="channel-item q-mb-xs rounded-borders text-grey-5"
                 active-class="text-white bg-grey-9"
               >
@@ -90,8 +94,8 @@
                 <!-- Action buttons (Leave / Delete) shown on hover or active -->
                 <q-item-section side class="channel-actions">
                   <div class="row q-gutter-xs">
-                    <q-btn v-if="channel.isAdmin" flat round dense icon="delete" size="xs" color="negative" @click.stop="deleteChannel(channel.id)" title="Zmazať (Si správca)" />
-                    <q-btn flat round dense icon="logout" size="xs" color="grey-4" @click.stop="leaveChannel(channel.id)" title="Opustiť" />
+                    <q-btn v-if="channel.isAdmin" flat round dense icon="delete" size="xs" color="negative" @click.prevent.stop="deleteChannel(channel.id)" title="Zmazať (Si správca)" />
+                    <q-btn flat round dense icon="logout" size="xs" color="grey-4" @click.prevent.stop="leaveChannel(channel.id)" title="Opustiť" />
                   </div>
                 </q-item-section>
               </q-item>
@@ -99,14 +103,6 @@
           </div>
         </q-scroll-area>
       </div>
-=======
-    <q-drawer v-model="leftDrawerOpen" show-if-above bordered>
-      <q-list>
-        <q-item-label header> Essential Links </q-item-label>
-
-        <EssentialLink v-for="link in linksList" :key="link.label" v-bind="link" />
-      </q-list>
->>>>>>> Stashed changes
     </q-drawer>
 
     <q-page-container>
@@ -117,7 +113,9 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useRouter } from 'vue-router';
 
+const router = useRouter();
 const leftDrawerOpen = ref(true);
 
 // --- Mock Channel Data pre 2. bod ---
@@ -141,19 +139,24 @@ const invitedChannels = computed(() => channels.value.filter(c => c.isInvited));
 const regularChannels = computed(() => channels.value.filter(c => !c.isInvited));
 
 // --- Akcie pre kanály ---
-function createChannel() {
+async function createChannel() {
   const name = prompt('Názov nového kanála:');
   if (!name) return;
   
   const isPrivate = confirm('Má byť kanál súkromný? (OK = Áno, Zrušiť = Nie)');
   
+  const formattedName = name.toLowerCase().replace(/\s+/g, '-');
+  
   channels.value.push({
     id: Date.now(),
-    name: name.toLowerCase().replace(/\s+/g, '-'),
+    name: formattedName,
     type: isPrivate ? 'private' : 'public',
     isInvited: false,
     isAdmin: true // Vytvoril si ho, takže si správca
   });
+
+  // Redirect to newly created channel
+  await router.push('/' + formattedName);
 }
 
 function leaveChannel(id: number) {

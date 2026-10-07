@@ -6,8 +6,9 @@
       show-if-above
       :width="312"
       :breakpoint="500"
-      class="row no-wrap"
     >
+     <div class="column no-wrap fit">
+      <div class="row no-wrap col" style="min-height: 0;">
       <!-- Servers Column (72px) -->
       <div class="server-sidebar col-auto" style="width: 72px; height: 100%;">
         <q-scroll-area class="fit" :horizontal-thumb-style="{ opacity: '0' }">
@@ -116,6 +117,47 @@
           </div>
         </q-scroll-area>
       </div>
+      </div>
+
+      <!-- Status bar používateľa -->
+      <div class="user-bar row no-wrap items-center q-px-sm">
+        <div class="user-info row no-wrap items-center col cursor-pointer rounded-borders q-pa-xs">
+          <div class="user-avatar-wrapper">
+            <q-avatar size="32px" color="primary" text-color="white">
+              {{ currentUser.username.charAt(0).toUpperCase() }}
+            </q-avatar>
+            <span class="status-dot" :style="{ backgroundColor: currentStatus.color }" />
+          </div>
+          <div class="col q-ml-sm" style="min-width: 0;">
+            <div class="text-weight-bold ellipsis" style="font-size: 14px; line-height: 1.2;">
+              {{ currentUser.username }}
+            </div>
+            <div class="text-grey-5 ellipsis" style="font-size: 12px; line-height: 1.2;">
+              {{ currentStatus.label }}
+            </div>
+          </div>
+
+          <q-menu anchor="top left" self="bottom left" :offset="[0, 8]" class="status-menu">
+            <q-list dense style="min-width: 180px;">
+              <q-item
+                v-for="option in statusOptions"
+                :key="option.value"
+                clickable
+                v-close-popup
+                :active="option.value === currentUser.status"
+                active-class="bg-grey-9"
+                @click="setStatus(option.value)"
+              >
+                <q-item-section avatar style="min-width: 24px; padding-right: 0;">
+                  <span class="status-dot status-dot--inline" :style="{ backgroundColor: option.color }" />
+                </q-item-section>
+                <q-item-section>{{ option.label }}</q-item-section>
+              </q-item>
+            </q-list>
+          </q-menu>
+        </div>
+      </div>
+     </div>
     </q-drawer>
 
     <q-page-container>
@@ -130,6 +172,28 @@ import { useRouter } from 'vue-router';
 
 const router = useRouter();
 const leftDrawerOpen = ref(true);
+
+// --- Mock používateľ a jeho stav ---
+type UserStatus = 'online' | 'dnd' | 'offline';
+
+const statusOptions: { value: UserStatus; label: string; color: string }[] = [
+  { value: 'online', label: 'Online', color: '#23a55a' },
+  { value: 'dnd', label: 'Nerušiť', color: '#f23f43' },
+  { value: 'offline', label: 'Offline', color: '#80848e' },
+];
+
+const currentUser = ref<{ username: string; status: UserStatus }>({
+  username: 'denis',
+  status: 'online',
+});
+
+const currentStatus = computed(
+  () => statusOptions.find(o => o.value === currentUser.value.status) ?? statusOptions[0]!
+);
+
+function setStatus(status: UserStatus) {
+  currentUser.value.status = status;
+}
 
 // --- Mock Channel Data pre 2. bod ---
 interface Channel {
@@ -346,4 +410,43 @@ function removeChannel(id: number) {
   opacity: 1;
   color: #dbdee1 !important;
 }
+
+/* Status bar používateľa */
+.user-bar {
+  height: 56px;
+  flex-shrink: 0;
+  background-color: #232428;
+}
+
+.user-info {
+  min-width: 0;
+  transition: background-color 0.1s;
+}
+
+.user-info:hover {
+  background-color: #35373c;
+}
+
+.user-avatar-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.status-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 3px solid #232428;
+  box-sizing: content-box;
+}
+
+.status-dot--inline {
+  position: static;
+  display: inline-block;
+  border: none;
+}
+
 </style>

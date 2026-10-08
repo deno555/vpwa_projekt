@@ -71,14 +71,18 @@
 import { ref, computed } from 'vue';
 import { useRoute } from 'vue-router';
 
-// Jednoduchý "store" pre správy (globálny mimo komponentu, aby si pamätal správy aj po prepnutí kanála)
+// Jednoduchý "store" pre správy, ktorý teraz číta z LocalStorage
 interface Message {
   id: number;
   author: string;
   text: string;
   time: string;
 }
-const messageStore = ref<Record<string, Message[]>>({});
+
+const savedHistory = localStorage.getItem('chatHistory');
+const messageStore = ref<Record<string, Message[]>>(
+  savedHistory ? JSON.parse(savedHistory) : {}
+);
 
 const route = useRoute();
 
@@ -128,6 +132,9 @@ function sendMessage() {
       text,
       time
     });
+    
+    // Uložíme zmenenú históriu do LocalStorage
+    localStorage.setItem('chatHistory', JSON.stringify(messageStore.value));
     
     newMessage.value = '';
   }

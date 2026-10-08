@@ -131,6 +131,8 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue';
+import { mapStores } from 'pinia';
+import { useAuthStore } from '@/stores/store';
 
 export default defineComponent({
   name: 'RegisterPage',
@@ -149,12 +151,31 @@ export default defineComponent({
     };
   },
 
+  computed: {
+    ...mapStores(useAuthStore),
+  },
+
   methods: {
     async onSubmit() {
+      this.loading = true;
       this.error = '';
-      // TODO: send to POST /api/v1/auth/signup
 
-      await this.$router.push('/');
+      // TODO: send to POST /api/v1/auth/signup
+      const error = await this.authStore.register({
+        username: this.nickname,
+        password: this.password,
+        name: this.name,
+        surname: this.surname,
+        email: this.email,
+      });
+
+      this.loading = false;
+
+      if (error) {
+        this.error = error;
+      } else {
+        await this.$router.push('/');
+      }
     },
   },
 });

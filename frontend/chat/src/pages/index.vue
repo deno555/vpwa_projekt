@@ -156,6 +156,19 @@
             </q-list>
           </q-menu>
         </div>
+
+        <q-btn flat round dense icon="settings" size="sm" class="q-ml-xs text-grey-5" title="Nastavenia">
+          <q-menu anchor="top right" self="bottom right" :offset="[0, 8]" class="discord-bg text-white">
+            <q-list dense style="min-width: 150px">
+              <q-item clickable v-close-popup @click="logout" class="text-red-4 hover-bg-grey-9">
+                <q-item-section>Odhlásiť sa</q-item-section>
+                <q-item-section side>
+                  <q-icon name="logout" size="xs" color="red-4" />
+                </q-item-section>
+              </q-item>
+            </q-list>
+          </q-menu>
+        </q-btn>
       </div>
      </div>
     </q-drawer>
@@ -182,8 +195,9 @@ const statusOptions: { value: UserStatus; label: string; color: string }[] = [
   { value: 'offline', label: 'Offline', color: '#80848e' },
 ];
 
+const storedUser = localStorage.getItem('currentUser') || 'Neznámy';
 const currentUser = ref<{ username: string; status: UserStatus }>({
-  username: 'denis',
+  username: storedUser,
   status: 'online',
 });
 
@@ -193,6 +207,11 @@ const currentStatus = computed(
 
 function setStatus(status: UserStatus) {
   currentUser.value.status = status;
+}
+
+async function logout() {
+  localStorage.removeItem('currentUser');
+  await router.push('/login');
 }
 
 // --- Mock Channel Data pre 2. bod ---

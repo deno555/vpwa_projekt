@@ -33,6 +33,15 @@ export default defineRouter((/* { store, ssrContext } */) => {
     history: createHistory(import.meta.env.QUASAR_VUE_ROUTER_BASE),
   });
 
+  Router.beforeEach((to, from, next) => {
+    const isAuthenticated = localStorage.getItem('currentUser');
+    if (to.path !== '/login' && to.path !== '/register' && !isAuthenticated) {
+      next('/login');
+    } else {
+      next();
+    }
+  });
+
   // enable HMR for it
   if (import.meta.hot) {
     handleHotUpdate(Router);

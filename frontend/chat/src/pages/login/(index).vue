@@ -11,17 +11,17 @@
           <q-form @submit="onSubmit">
             <q-card-section class="q-gutter-md">
               <q-input
-                v-model="email"
-                type="email"
-                label="Email"
+                v-model="username"
+                type="text"
+                label="Username"
                 outlined
                 autofocus
-                autocomplete="email"
-                :rules="[(v) => !!v || 'Email is required', (v) => /.+@.+\..+/.test(v) || 'Invalid email']"
+                autocomplete="username"
+                :rules="[(v) => !!v || 'Username is required']"
                 lazy-rules
               >
                 <template #prepend>
-                  <q-icon name="mail" />
+                  <q-icon name="person" />
                 </template>
               </q-input>
 
@@ -79,7 +79,7 @@ import { useRouter } from 'vue-router';
 
 const router = useRouter();
 
-const email = ref('');
+const username = ref('');
 const password = ref('');
 const showPassword = ref(false);
 const loading = ref(false);
@@ -89,9 +89,20 @@ async function onSubmit() {
   loading.value = true;
   error.value = '';
 
-  // TODO: send to POST /api/v1/auth/signup
-
-  await router.push('/');
+  // Hardcoded accounts simulation
+  await new Promise(resolve => setTimeout(resolve, 500)); // simulate network delay
+  
+  loading.value = false;
+  
+  if (
+    (username.value === 'denis' && password.value === 'admin') ||
+    (username.value === 'jakub' && password.value === 'admin')
+  ) {
+    localStorage.setItem('currentUser', username.value);
+    await router.push('/');
+  } else {
+    error.value = 'Nesprávne meno alebo heslo';
+  }
 }
 </script>
 

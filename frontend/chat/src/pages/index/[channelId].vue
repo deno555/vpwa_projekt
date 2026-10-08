@@ -23,18 +23,18 @@
           <div class="text-grey-5">Toto je začiatok histórie tohto kanála.</div>
         </div>
 
-        <!-- Mock Messages -->
-        <div v-for="i in 3" :key="i" class="q-mb-md flex q-py-xs msg-hover">
+        <!-- Messages -->
+        <div v-for="msg in currentMessages" :key="msg.id" class="q-mb-md flex q-py-xs msg-hover">
           <q-avatar size="40px" color="primary" text-color="white" class="q-mr-md">
-            {{ ['A', 'B', 'C'][i-1] }}
+            {{ msg.author.charAt(0).toUpperCase() }}
           </q-avatar>
           <div>
             <div class="flex items-baseline q-mb-xs">
-              <span class="text-white text-weight-bold q-mr-sm">Používateľ {{ i }}</span>
-              <span class="text-grey-5 text-caption">Dnes o 12:0{{ i }}</span>
+              <span class="text-white text-weight-bold q-mr-sm">{{ msg.author }}</span>
+              <span class="text-grey-5 text-caption">Dnes o {{ msg.time }}</span>
             </div>
-            <div class="text-grey-3">
-              Toto je ukážková správa pre kanál {{ channelName }}.
+            <div class="text-grey-3" style="word-break: break-word;">
+              {{ msg.text }}
             </div>
           </div>
         </div>
@@ -50,7 +50,7 @@
         bg-color="grey-9"
         dark
         rounded
-        placeholder="Napíš správu sem..."
+        :placeholder="'Napíš správu do #' + channelName"
         class="full-width"
         @keyup.enter="sendMessage"
       >
@@ -71,20 +71,64 @@
 import { ref, computed } from 'vue';
 import { useRoute } from 'vue-router';
 
+// Jednoduchý "store" pre správy (globálny mimo komponentu, aby si pamätal správy aj po prepnutí kanála)
+interface Message {
+  id: number;
+  author: string;
+  text: string;
+  time: string;
+}
+const messageStore = ref<Record<string, Message[]>>({});
+
 const route = useRoute();
 
-// For mockup purposes, we just derive a name from the ID or generic
 const channelName = computed(() => {
   const params = route.params as Record<string, string>;
   return typeof params.channelId === 'string' ? params.channelId : 'neznámy-kanál';
 });
 
+const currentMessages = computed(() => {
+  const ch = channelName.value;
+  // Len vraciame správy, nemeníme (nemutujeme) messageStore vo vnútri computed funkcie.
+  return messageStore.value[ch] || [
+    { 
+      id: 1, 
+      author: 'Systém', 
+      text: `Toto je prvá uvítacia správa v kanáli ${ch}.`, 
+      time: new Date().toLocaleTimeString('sk-SK', {hour: '2-digit', minute:'2-digit'}) 
+    }
+  ];
+});
+
 const newMessage = ref('');
 
 function sendMessage() {
-  if (newMessage.value.trim() !== '') {
-    // Here we would normally send it to the backend
-    console.log('Odosielam správu:', newMessage.value);
+  const text = newMessage.value.trim();
+  if (text !== '') {
+    const ch = channelName.value;
+    const author = localStorage.getItem('currentUser') || 'Neznámy';
+    const time = new Date().toLocaleTimeString('sk-SK', {hour: '2-digit', minute:'2-digit'});
+    
+    // Ak pre tento kanál ešte nemáme pole správ, vytvoríme ho (spolu so systémovou správou)
+    if (!messageStore.value[ch]) {
+      messageStore.value[ch] = [
+        { 
+          id: 1, 
+          author: 'Systém', 
+          text: `Toto je prvá uvítacia správa v kanáli ${ch}.`, 
+          time: new Date().toLocaleTimeString('sk-SK', {hour: '2-digit', minute:'2-digit'}) 
+        }
+      ];
+    }
+    
+    // Tu pridávame samotnú správu
+    messageStore.value[ch].push({
+      id: Date.now(),
+      author,
+      text,
+      time
+    });
+    
     newMessage.value = '';
   }
 }

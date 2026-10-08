@@ -6,6 +6,7 @@ import {
   createWebHashHistory,
   createWebHistory,
 } from 'vue-router';
+import { useAuthStore } from '@/stores/store';
 
 /*
  * If not building with SSR mode, you can
@@ -34,8 +35,8 @@ export default defineRouter((/* { store, ssrContext } */) => {
   });
 
   Router.beforeEach((to, from, next) => {
-    const isAuthenticated = localStorage.getItem('currentUser');
-    if (to.path !== '/login' && to.path !== '/register' && !isAuthenticated) {
+    const auth = useAuthStore();
+    if (to.path !== '/login' && to.path !== '/register' && !auth.isAuthenticated) {
       next('/login');
     } else {
       next();

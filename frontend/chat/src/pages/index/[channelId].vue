@@ -70,20 +70,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRoute } from 'vue-router';
+import { useChatStore } from '@/stores/store';
 
-// Jednoduchý "store" pre správy, ktorý teraz číta z LocalStorage
-interface Message {
-  id: number;
-  author: string;
-  text: string;
-  time: string;
-}
-
-const savedHistory = localStorage.getItem('chatHistory');
-const messageStore = ref<Record<string, Message[]>>(
-  savedHistory ? JSON.parse(savedHistory) : {}
-);
-
+const chat = useChatStore();
 const route = useRoute();
 
 const channelName = computed(() => {
@@ -91,53 +80,13 @@ const channelName = computed(() => {
   return typeof params.channelId === 'string' ? params.channelId : 'neznámy-kanál';
 });
 
-const currentMessages = computed(() => {
-  const ch = channelName.value;
-  // Len vraciame správy, nemeníme (nemutujeme) messageStore vo vnútri computed funkcie.
-  return messageStore.value[ch] || [
-    { 
-      id: 1, 
-      author: 'Systém', 
-      text: `Toto je prvá uvítacia správa v kanáli ${ch}.`, 
-      time: new Date().toLocaleTimeString('sk-SK', {hour: '2-digit', minute:'2-digit'}) 
-    }
-  ];
-});
+const currentMessages = computed(() => chat.messagesFor(channelName.value));
 
 const newMessage = ref('');
 
 function sendMessage() {
-  const text = newMessage.value.trim();
-  if (text !== '') {
-    const ch = channelName.value;
-    const author = localStorage.getItem('currentUser') || 'Neznámy';
-    const time = new Date().toLocaleTimeString('sk-SK', {hour: '2-digit', minute:'2-digit'});
-    
-    // Ak pre tento kanál ešte nemáme pole správ, vytvoríme ho (spolu so systémovou správou)
-    if (!messageStore.value[ch]) {
-      messageStore.value[ch] = [
-        { 
-          id: 1, 
-          author: 'Systém', 
-          text: `Toto je prvá uvítacia správa v kanáli ${ch}.`, 
-          time: new Date().toLocaleTimeString('sk-SK', {hour: '2-digit', minute:'2-digit'}) 
-        }
-      ];
-    }
-    
-    // Tu pridávame samotnú správu
-    messageStore.value[ch].push({
-      id: Date.now(),
-      author,
-      text,
-      time
-    });
-    
-    // Uložíme zmenenú históriu do LocalStorage
-    localStorage.setItem('chatHistory', JSON.stringify(messageStore.value));
-    
-    newMessage.value = '';
-  }
+  chat.sendMessage(channelName.value, newMessage.value);
+  newMessage.value = '';
 }
 </script>
 

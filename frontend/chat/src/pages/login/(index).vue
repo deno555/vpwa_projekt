@@ -76,8 +76,10 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { useAuthStore } from '@/stores/store';
 
 const router = useRouter();
+const auth = useAuthStore();
 
 const username = ref('');
 const password = ref('');
@@ -89,16 +91,11 @@ async function onSubmit() {
   loading.value = true;
   error.value = '';
 
-  // Hardcoded accounts simulation
-  await new Promise(resolve => setTimeout(resolve, 500)); // simulate network delay
-  
+  const ok = await auth.login(username.value, password.value);
+
   loading.value = false;
-  
-  if (
-    (username.value === 'denis' && password.value === 'admin') ||
-    (username.value === 'jakub' && password.value === 'admin')
-  ) {
-    localStorage.setItem('currentUser', username.value);
+
+  if (ok) {
     await router.push('/');
   } else {
     error.value = 'Nesprávne meno alebo heslo';

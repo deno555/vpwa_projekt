@@ -182,8 +182,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { useAuthStore } from '@/stores/store';
 
 const router = useRouter();
+const auth = useAuthStore();
 const leftDrawerOpen = ref(true);
 
 // --- Mock používateľ a jeho stav ---
@@ -195,9 +197,8 @@ const statusOptions: { value: UserStatus; label: string; color: string }[] = [
   { value: 'offline', label: 'Offline', color: '#80848e' },
 ];
 
-const storedUser = localStorage.getItem('currentUser') || 'Neznámy';
 const currentUser = ref<{ username: string; status: UserStatus }>({
-  username: storedUser,
+  username: auth.currentUser || 'Neznámy',
   status: 'online',
 });
 
@@ -210,7 +211,7 @@ function setStatus(status: UserStatus) {
 }
 
 async function logout() {
-  localStorage.removeItem('currentUser');
+  auth.logout();
   await router.push('/login');
 }
 

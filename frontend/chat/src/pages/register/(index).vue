@@ -129,28 +129,35 @@
   </q-layout>
 </template>
 
-<script setup lang="ts">
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+<script lang="ts">
+import { defineComponent } from 'vue';
 
-const router = useRouter();
+export default defineComponent({
+  name: 'RegisterPage',
 
-const name = ref('');
-const surname = ref('');
-const nickname = ref('');
-const email = ref('');
-const password = ref('');
-const passwordConfirmation = ref('');
-const showPassword = ref(false);
-const loading = ref(false);
-const error = ref('');
+  data() {
+    return {
+      name: '',
+      surname: '',
+      nickname: '',
+      email: '',
+      password: '',
+      passwordConfirmation: '',
+      showPassword: false,
+      loading: false,
+      error: '',
+    };
+  },
 
-async function onSubmit() {
-  error.value = '';
-  // TODO: send to POST /api/v1/auth/signup
+  methods: {
+    async onSubmit() {
+      this.error = '';
+      // TODO: send to POST /api/v1/auth/signup
 
-  await router.push('/');
-}
+      await this.$router.push('/');
+    },
+  },
+});
 </script>
 
 <style scoped>

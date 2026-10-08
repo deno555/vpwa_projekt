@@ -179,41 +179,25 @@
   </q-layout>
 </template>
 
-<script setup lang="ts">
-import { ref, computed } from 'vue';
-import { useRouter } from 'vue-router';
+<script lang="ts">
+import { defineComponent } from 'vue';
+import { mapStores } from 'pinia';
 import { useAuthStore } from '@/stores/store';
-
-const router = useRouter();
-const auth = useAuthStore();
-const leftDrawerOpen = ref(true);
 
 // --- Mock používateľ a jeho stav ---
 type UserStatus = 'online' | 'dnd' | 'offline';
 
-const statusOptions: { value: UserStatus; label: string; color: string }[] = [
+interface StatusOption {
+  value: UserStatus;
+  label: string;
+  color: string;
+}
+
+const STATUS_OPTIONS: StatusOption[] = [
   { value: 'online', label: 'Online', color: '#23a55a' },
   { value: 'dnd', label: 'Nerušiť', color: '#f23f43' },
   { value: 'offline', label: 'Offline', color: '#80848e' },
 ];
-
-const currentUser = ref<{ username: string; status: UserStatus }>({
-  username: auth.currentUser || 'Neznámy',
-  status: 'online',
-});
-
-const currentStatus = computed(
-  () => statusOptions.find(o => o.value === currentUser.value.status) ?? statusOptions[0]!
-);
-
-function setStatus(status: UserStatus) {
-  currentUser.value.status = status;
-}
-
-async function logout() {
-  auth.logout();
-  await router.push('/login');
-}
 
 // --- Mock Channel Data pre 2. bod ---
 interface Channel {
@@ -230,7 +214,7 @@ interface Server {
   channels: Channel[];
 }
 
-const servers = ref<Server[]>([
+const MOCK_SERVERS: Server[] = [
   {
     id: 1,
     name: 'Dev Tím',
@@ -275,58 +259,100 @@ const servers = ref<Server[]>([
       { id: 14, name: 'spoilery', type: 'private', isInvited: false, isAdmin: true },
     ],
   },
-]);
+];
 
-const selectedServerId = ref(servers.value[0]!.id);
-const selectedServer = computed(
-  () => servers.value.find(s => s.id === selectedServerId.value) ?? servers.value[0]!
-);
+export default defineComponent({
+  name: 'MainLayout',
 
-function selectServer(id: number) {
-  selectedServerId.value = id;
-}
+  data() {
+    const currentUser: { username: string; status: UserStatus } = {
+      username: useAuthStore().currentUser || 'Neznámy',
+      status: 'online',
+    };
 
-// Computed vlastnosti pre rozdelenie zoznamu
-const invitedChannels = computed(() => selectedServer.value.channels.filter(c => c.isInvited));
-const regularChannels = computed(() => selectedServer.value.channels.filter(c => !c.isInvited));
+    return {
+      leftDrawerOpen: true,
+      statusOptions: STATUS_OPTIONS,
+      currentUser,
+      servers: MOCK_SERVERS,
+      selectedServerId: MOCK_SERVERS[0]!.id,
+    };
+  },
 
-// --- Akcie pre kanály ---
-async function createChannel() {
-  const name = prompt('Názov nového kanála:');
-  if (!name) return;
+  computed: {
+    ...mapStores(useAuthStore),
 
-  const isPrivate = confirm('Má byť kanál súkromný? (OK = Áno, Zrušiť = Nie)');
-  
-  const formattedName = name.toLowerCase().replace(/\s+/g, '-');
+    currentStatus(): StatusOption {
+      return this.statusOptions.find(o => o.value === this.currentUser.status) ?? this.statusOptions[0]!;
+    },
 
-  selectedServer.value.channels.push({
-    id: Date.now(),
-    name: formattedName,
-    type: isPrivate ? 'private' : 'public',
-    isInvited: false,
-    isAdmin: true // Vytvoril si ho, takže si správca
-  });
+    selectedServer(): Server {
+      return this.servers.find(s => s.id === this.selectedServerId) ?? this.servers[0]!;
+    },
 
-  // Redirect to newly created channel
-  await router.push('/' + formattedName);
-}
+    // Computed vlastnosti pre rozdelenie zoznamu
+    invitedChannels(): Channel[] {
+      return this.selectedServer.channels.filter(c => c.isInvited);
+    },
 
-function leaveChannel(id: number) {
-  if (confirm('Naozaj chceš opustiť tento kanál?')) {
-    removeChannel(id);
-  }
-}
+    regularChannels(): Channel[] {
+      return this.selectedServer.channels.filter(c => !c.isInvited);
+    },
+  },
 
-function deleteChannel(id: number) {
-  if (confirm('Naozaj chceš zmazať tento kanál? Ako správca ho vymažeš natrvalo.')) {
-    removeChannel(id);
-  }
-}
+  methods: {
+    setStatus(status: UserStatus) {
+      this.currentUser.status = status;
+    },
 
-function removeChannel(id: number) {
-  const server = selectedServer.value;
-  server.channels = server.channels.filter(c => c.id !== id);
-}
+    async logout() {
+      this.authStore.logout();
+      await this.$router.push('/login');
+    },
+
+    selectServer(id: number) {
+      this.selectedServerId = id;
+    },
+
+    // --- Akcie pre kanály ---
+    async createChannel() {
+      const name = prompt('Názov nového kanála:');
+      if (!name) return;
+
+      const isPrivate = confirm('Má byť kanál súkromný? (OK = Áno, Zrušiť = Nie)');
+
+      const formattedName = name.toLowerCase().replace(/\s+/g, '-');
+
+      this.selectedServer.channels.push({
+        id: Date.now(),
+        name: formattedName,
+        type: isPrivate ? 'private' : 'public',
+        isInvited: false,
+        isAdmin: true // Vytvoril si ho, takže si správca
+      });
+
+      // Redirect to newly created channel
+      await this.$router.push('/' + formattedName);
+    },
+
+    leaveChannel(id: number) {
+      if (confirm('Naozaj chceš opustiť tento kanál?')) {
+        this.removeChannel(id);
+      }
+    },
+
+    deleteChannel(id: number) {
+      if (confirm('Naozaj chceš zmazať tento kanál? Ako správca ho vymažeš natrvalo.')) {
+        this.removeChannel(id);
+      }
+    },
+
+    removeChannel(id: number) {
+      const server = this.selectedServer;
+      server.channels = server.channels.filter(c => c.id !== id);
+    },
+  },
+});
 </script>
 
 <style scoped>

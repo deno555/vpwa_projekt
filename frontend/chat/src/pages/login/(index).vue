@@ -73,34 +73,45 @@
   </q-layout>
 </template>
 
-<script setup lang="ts">
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+<script lang="ts">
+import { defineComponent } from 'vue';
+import { mapStores } from 'pinia';
 import { useAuthStore } from '@/stores/store';
 
-const router = useRouter();
-const auth = useAuthStore();
+export default defineComponent({
+  name: 'LoginPage',
 
-const username = ref('');
-const password = ref('');
-const showPassword = ref(false);
-const loading = ref(false);
-const error = ref('');
+  data() {
+    return {
+      username: '',
+      password: '',
+      showPassword: false,
+      loading: false,
+      error: '',
+    };
+  },
 
-async function onSubmit() {
-  loading.value = true;
-  error.value = '';
+  computed: {
+    ...mapStores(useAuthStore),
+  },
 
-  const ok = await auth.login(username.value, password.value);
+  methods: {
+    async onSubmit() {
+      this.loading = true;
+      this.error = '';
 
-  loading.value = false;
+      const ok = await this.authStore.login(this.username, this.password);
 
-  if (ok) {
-    await router.push('/');
-  } else {
-    error.value = 'Nesprávne meno alebo heslo';
-  }
-}
+      this.loading = false;
+
+      if (ok) {
+        await this.$router.push('/');
+      } else {
+        this.error = 'Nesprávne meno alebo heslo';
+      }
+    },
+  },
+});
 </script>
 
 <style scoped>

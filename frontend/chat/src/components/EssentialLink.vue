@@ -11,7 +11,9 @@
   </q-item>
 </template>
 
-<script setup lang="ts">
+<script lang="ts">
+import { defineComponent } from 'vue';
+
 export interface EssentialLinkProps {
   label: string;
   caption?: string;
@@ -19,9 +21,13 @@ export interface EssentialLinkProps {
   icon?: string;
 }
 
-withDefaults(defineProps<EssentialLinkProps>(), {
-  caption: '',
-  link: '#',
-  icon: '',
+export default defineComponent({
+  name: 'EssentialLink',
+  props: {
+    label: { type: String, required: true },
+    caption: { type: String, default: '' },
+    link: { type: String, default: '#' },
+    icon: { type: String, default: '' },
+  },
 });
 </script>

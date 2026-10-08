@@ -67,27 +67,40 @@
   </q-page>
 </template>
 
-<script setup lang="ts">
-import { ref, computed } from 'vue';
-import { useRoute } from 'vue-router';
+<script lang="ts">
+import { defineComponent } from 'vue';
+import { mapStores } from 'pinia';
 import { useChatStore } from '@/stores/store';
 
-const chat = useChatStore();
-const route = useRoute();
+export default defineComponent({
+  name: 'ChannelPage',
 
-const channelName = computed(() => {
-  const params = route.params as Record<string, string>;
-  return typeof params.channelId === 'string' ? params.channelId : 'neznámy-kanál';
+  data() {
+    return {
+      newMessage: '',
+    };
+  },
+
+  computed: {
+    ...mapStores(useChatStore),
+
+    channelName(): string {
+      const params = this.$route.params as Record<string, string>;
+      return typeof params.channelId === 'string' ? params.channelId : 'neznámy-kanál';
+    },
+
+    currentMessages() {
+      return this.chatStore.messagesFor(this.channelName);
+    },
+  },
+
+  methods: {
+    sendMessage() {
+      this.chatStore.sendMessage(this.channelName, this.newMessage);
+      this.newMessage = '';
+    },
+  },
 });
-
-const currentMessages = computed(() => chat.messagesFor(channelName.value));
-
-const newMessage = ref('');
-
-function sendMessage() {
-  chat.sendMessage(channelName.value, newMessage.value);
-  newMessage.value = '';
-}
 </script>
 
 <style scoped>

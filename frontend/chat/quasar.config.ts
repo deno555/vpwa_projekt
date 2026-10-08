@@ -48,6 +48,9 @@ export default defineConfig((/* ctx */) => {
       vueRouterMode: 'hash', // available values: 'hash', 'history'
       // vueRouterBase,
 
+      // components are written with the Options API (data/computed/methods)
+      vueOptionsAPI: true,
+
       // publicPath: '/',
       // define: {},
       // defineEnv: {}

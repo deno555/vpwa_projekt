@@ -34,12 +34,10 @@ export default defineRouter((/* { store, ssrContext } */) => {
     history: createHistory(import.meta.env.QUASAR_VUE_ROUTER_BASE),
   });
 
-  Router.beforeEach((to, from, next) => {
+  Router.beforeEach((to) => {
     const auth = useAuthStore();
     if (to.path !== '/login' && to.path !== '/register' && !auth.isAuthenticated) {
-      next('/login');
-    } else {
-      next();
+      return '/login';
     }
   });
 

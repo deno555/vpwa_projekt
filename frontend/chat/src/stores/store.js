@@ -92,16 +92,78 @@ function welcomeMessage(channel) {
 
 const savedHistory = localStorage.getItem('chatHistory')
 
+let bc = null
+if (typeof window !== 'undefined' && typeof window.BroadcastChannel !== 'undefined') {
+  try {
+    bc = new BroadcastChannel('vpwa_chat_sync')
+  } catch {
+    bc = null
+  }
+}
+
 export const useChatStore = defineStore('chat', {
   state: () => ({
     /** @type {Record<string, Message[]>} */
     history: savedHistory ? JSON.parse(savedHistory) : {},
+    /** @type {Record<string, Record<string, number>>} */
+    typingUsers: {},
   }),
   getters: {
     messagesFor: (state) => (/** @type {string} */ channel) =>
       state.history[channel] || [welcomeMessage(channel)],
+    typingUsersFor: (state) => (/** @type {string} */ channel) => {
+      const channelMap = state.typingUsers[channel]
+      if (!channelMap) return []
+      const now = Date.now()
+      return Object.entries(channelMap)
+        .filter(([, timestamp]) => now - timestamp < 3500)
+        .map(([user]) => user)
+    },
   },
   actions: {
+    /**
+     * @param {string} channel
+     * @param {string} username
+     * @param {boolean} isTyping
+     */
+    setTyping(channel, username, isTyping) {
+      const time = Date.now()
+      this.applyTyping(channel, username, isTyping, time)
+
+      if (bc) {
+        try {
+          bc.postMessage({
+            type: 'typing',
+            channel,
+            username,
+            isTyping,
+            time,
+          })
+        } catch {
+          // ignore
+        }
+      }
+    },
+
+    /**
+     * @param {string} channel
+     * @param {string} username
+     * @param {boolean} isTyping
+     * @param {number} [time]
+     */
+    applyTyping(channel, username, isTyping, time = Date.now()) {
+      if (!this.typingUsers[channel]) {
+        this.typingUsers[channel] = {}
+      }
+      const updated = { ...this.typingUsers[channel] }
+      if (isTyping) {
+        updated[username] = time
+      } else {
+        delete updated[username]
+      }
+      this.typingUsers[channel] = updated
+    },
+
     /**
      * @param {string} channel
      * @param {string} rawText
@@ -117,15 +179,69 @@ export const useChatStore = defineStore('chat', {
         this.history[channel] = [welcomeMessage(channel)]
       }
 
-      this.history[channel].push({
+      const msg = {
         id: Date.now(),
         author: auth.currentUser || 'Neznámy',
         text,
         time: currentTime(),
-      })
+      }
+
+      this.history[channel].push(msg)
 
       // Uložíme zmenenú históriu do LocalStorage
       localStorage.setItem('chatHistory', JSON.stringify(this.history))
+
+      if (bc) {
+        try {
+          bc.postMessage({
+            type: 'new_message',
+            channel,
+            message: msg,
+          })
+        } catch {
+          // ignore
+        }
+      }
+    },
+
+    /**
+     * @param {string} channel
+     * @param {Message} message
+     */
+    applyNewMessage(channel, message) {
+      if (!this.history[channel]) {
+        this.history[channel] = [welcomeMessage(channel)]
+      }
+      if (!this.history[channel].some((m) => m.id === message.id)) {
+        this.history[channel].push(message)
+        localStorage.setItem('chatHistory', JSON.stringify(this.history))
+      }
     },
   },
 })
+
+if (bc) {
+  bc.onmessage = (event) => {
+    const data = event.data
+    if (!data) return
+    const chatStore = useChatStore()
+    if (data.type === 'typing') {
+      chatStore.applyTyping(data.channel, data.username, data.isTyping, data.time)
+    } else if (data.type === 'new_message') {
+      chatStore.applyNewMessage(data.channel, data.message)
+    }
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key === 'chatHistory' && event.newValue) {
+      try {
+        const store = useChatStore()
+        store.history = JSON.parse(event.newValue)
+      } catch {
+        // ignore
+      }
+    }
+  })
+}

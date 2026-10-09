@@ -53,6 +53,23 @@
         <div class="channel-header flex items-center justify-between q-px-md cursor-pointer">
           <div class="text-weight-bold ellipsis">{{ selectedServer?.name }}</div>
           <q-icon name="expand_more" size="sm" />
+
+          <q-menu anchor="bottom left" self="top left" :offset="[0, 4]" class="discord-bg text-white">
+            <q-list dense style="min-width: 180px">
+              <q-item clickable v-close-popup @click="leaveServer" class="text-red-4 hover-bg-grey-9">
+                <q-item-section>Odísť zo servera</q-item-section>
+                <q-item-section side>
+                  <q-icon name="logout" size="xs" color="red-4" />
+                </q-item-section>
+              </q-item>
+              <q-item v-if="isServerAdmin" clickable v-close-popup @click="deleteServer" class="text-red-4 hover-bg-grey-9">
+                <q-item-section>Zmazať server</q-item-section>
+                <q-item-section side>
+                  <q-icon name="delete" size="xs" color="red-4" />
+                </q-item-section>
+              </q-item>
+            </q-list>
+          </q-menu>
         </div>
 
         <q-scroll-area style="height: calc(100% - 48px);" :horizontal-thumb-style="{ opacity: '0' }">
@@ -267,6 +284,11 @@ export default defineComponent({
           isAdmin: c.admin === currentNick,
         }));
     },
+
+    isServerAdmin(): boolean {
+      const currentNick = this.authStore.currentUser || '';
+      return this.selectedServer?.admin === currentNick;
+    },
   },
 
   methods: {
@@ -292,6 +314,53 @@ export default defineComponent({
       const res = this.chatStore.executeCommand('všeobecný', `/create ${name} ${isPrivate ? 'private' : ''}`);
       if (res.redirectUrl) {
         await this.$router.push(res.redirectUrl);
+      }
+    },
+
+    async leaveServer() {
+      if (!this.selectedServer) return;
+      const serverName = this.selectedServer.name;
+      const currentNick = this.authStore.currentUser || '';
+
+      if (this.isServerAdmin) {
+        if (confirm(`Ako správca servera "${serverName}" jeho opustením server zrušíš (/delete). Naozaj chceš odísť?`)) {
+          const res = this.chatStore.executeCommand(this.selectedServer.channels[0]?.name || 'všeobecný', '/delete');
+          if (res.redirectUrl) {
+            await this.$router.push(res.redirectUrl);
+          }
+        }
+        return;
+      }
+
+      if (confirm(`Naozaj chceš odísť zo servera "${serverName}"?`)) {
+        for (const channel of this.selectedServer.channels) {
+          if (Array.isArray(channel.members)) {
+            channel.members = channel.members.filter((m: string) => m !== currentNick);
+          }
+          if (Array.isArray(channel.invited)) {
+            channel.invited = channel.invited.filter((i: string) => i !== currentNick);
+          }
+        }
+        this.chatStore.saveServers();
+
+        const otherServer = this.chatStore.servers.find(s => s.id !== this.selectedServerId);
+        if (otherServer) {
+          this.chatStore.selectServer(otherServer.id);
+          const nextChannel = otherServer.channels[0]?.name || 'všeobecný';
+          await this.$router.push('/' + nextChannel);
+          this.chatStore.addSystemMessage(nextChannel, `Opustil si server "${serverName}".`);
+        }
+      }
+    },
+
+    async deleteServer() {
+      if (!this.selectedServer) return;
+      const serverName = this.selectedServer.name;
+      if (confirm(`Naozaj chceš zmazať server "${serverName}"? Ako správca ho vymažeš natrvalo.`)) {
+        const res = this.chatStore.executeCommand(this.selectedServer.channels[0]?.name || 'všeobecný', '/delete');
+        if (res.redirectUrl) {
+          await this.$router.push(res.redirectUrl);
+        }
       }
     },
 
@@ -328,6 +397,9 @@ export default defineComponent({
 </script>
 
 <style scoped>
+.hover-bg-grey-9:hover {
+  background-color: #35373c;
+}
 .server-sidebar {
   background-color: #1e1f22 !important;
   border-right: none;

@@ -41,7 +41,7 @@
             </div>
             
             <div class="server-icon-wrapper">
-              <q-btn round unelevated text-color="green" color="grey-9" icon="add" size="md" />
+              <q-btn round unelevated text-color="green" color="grey-9" icon="add" size="md" @click="createServerPrompt" title="Vytvoriť server (/create)" />
             </div>
           </div>
         </q-scroll-area>
@@ -51,7 +51,7 @@
       <div class="channel-sidebar col" style="height: 100%;">
         <!-- Sidebar Header -->
         <div class="channel-header flex items-center justify-between q-px-md cursor-pointer">
-          <div class="text-weight-bold ellipsis">{{ selectedServer.name }}</div>
+          <div class="text-weight-bold ellipsis">{{ selectedServer?.name }}</div>
           <q-icon name="expand_more" size="sm" />
         </div>
 
@@ -108,8 +108,8 @@
                 <!-- Action buttons (Leave / Delete) shown on hover or active -->
                 <q-item-section side class="channel-actions">
                   <div class="row q-gutter-xs">
-                    <q-btn v-if="channel.isAdmin" flat round dense icon="delete" size="xs" color="negative" @click.prevent.stop="deleteChannel(channel.id)" title="Zmazať (Si správca)" />
-                    <q-btn flat round dense icon="logout" size="xs" color="grey-4" @click.prevent.stop="leaveChannel(channel.id)" title="Opustiť" />
+                    <q-btn v-if="channel.isAdmin" flat round dense icon="delete" size="xs" color="negative" @click.prevent.stop="deleteChannel(channel.name)" title="Zmazať kanál (/quit)" />
+                    <q-btn flat round dense icon="logout" size="xs" color="grey-4" @click.prevent.stop="leaveChannel(channel.name)" title="Opustiť kanál (/cancel)" />
                   </div>
                 </q-item-section>
               </q-item>
@@ -182,9 +182,9 @@
 <script lang="ts">
 import { defineComponent } from 'vue';
 import { mapStores } from 'pinia';
-import { useAuthStore } from '@/stores/store';
+import { useAuthStore, useChatStore } from '@/stores/store';
 
-// --- Mock používateľ a jeho stav ---
+// --- Používateľ a jeho stav ---
 type UserStatus = 'online' | 'dnd' | 'offline';
 
 interface StatusOption {
@@ -199,67 +199,16 @@ const STATUS_OPTIONS: StatusOption[] = [
   { value: 'offline', label: 'Offline', color: '#80848e' },
 ];
 
-// --- Mock Channel Data pre 2. bod ---
-interface Channel {
+interface ChannelItem {
   id: number;
   name: string;
   type: 'public' | 'private';
-  isInvited: boolean;
-  isAdmin: boolean;
+  admin: string;
+  members: string[];
+  invited: string[];
+  banned: string[];
+  kicks: Record<string, string[]>;
 }
-
-interface Server {
-  id: number;
-  name: string;
-  channels: Channel[];
-}
-
-const MOCK_SERVERS: Server[] = [
-  {
-    id: 1,
-    name: 'Dev Tím',
-    channels: [
-      { id: 1, name: 'všeobecný', type: 'public', isInvited: false, isAdmin: false },
-      { id: 2, name: 'tajný-vývoj', type: 'private', isInvited: false, isAdmin: true },
-      { id: 3, name: 'nová-kampaň', type: 'public', isInvited: true, isAdmin: false }, // Pozvánka (topovaná a zvýraznená)
-      { id: 4, name: 'off-topic', type: 'public', isInvited: false, isAdmin: true },
-    ],
-  },
-  {
-    id: 2,
-    name: 'Škola',
-    channels: [
-      { id: 5, name: 'oznamy', type: 'public', isInvited: false, isAdmin: false },
-      { id: 6, name: 'vpwa', type: 'public', isInvited: false, isAdmin: false },
-      { id: 7, name: 'projekt-tím', type: 'private', isInvited: false, isAdmin: true },
-    ],
-  },
-  {
-    id: 3,
-    name: 'Gaming',
-    channels: [
-      { id: 8, name: 'lobby', type: 'public', isInvited: false, isAdmin: true },
-      { id: 9, name: 'turnaj', type: 'public', isInvited: true, isAdmin: false },
-      { id: 10, name: 'clips', type: 'public', isInvited: false, isAdmin: false },
-    ],
-  },
-  {
-    id: 4,
-    name: 'Muzika',
-    channels: [
-      { id: 11, name: 'odporúčania', type: 'public', isInvited: false, isAdmin: false },
-      { id: 12, name: 'playlisty', type: 'public', isInvited: false, isAdmin: false },
-    ],
-  },
-  {
-    id: 5,
-    name: 'Anime Klub',
-    channels: [
-      { id: 13, name: 'diskusia', type: 'public', isInvited: false, isAdmin: false },
-      { id: 14, name: 'spoilery', type: 'private', isInvited: false, isAdmin: true },
-    ],
-  },
-];
 
 export default defineComponent({
   name: 'MainLayout',
@@ -274,29 +223,49 @@ export default defineComponent({
       leftDrawerOpen: true,
       statusOptions: STATUS_OPTIONS,
       currentUser,
-      servers: MOCK_SERVERS,
-      selectedServerId: MOCK_SERVERS[0]!.id,
     };
   },
 
   computed: {
-    ...mapStores(useAuthStore),
+    ...mapStores(useAuthStore, useChatStore),
 
     currentStatus(): StatusOption {
       return this.statusOptions.find(o => o.value === this.currentUser.status) ?? this.statusOptions[0]!;
     },
 
-    selectedServer(): Server {
-      return this.servers.find(s => s.id === this.selectedServerId) ?? this.servers[0]!;
+    servers() {
+      return this.chatStore.servers;
     },
 
-    // Computed vlastnosti pre rozdelenie zoznamu
-    invitedChannels(): Channel[] {
-      return this.selectedServer.channels.filter(c => c.isInvited);
+    selectedServerId(): number {
+      return this.chatStore.selectedServerId;
     },
 
-    regularChannels(): Channel[] {
-      return this.selectedServer.channels.filter(c => !c.isInvited);
+    selectedServer() {
+      return this.chatStore.currentServer;
+    },
+
+    // Computed vlastnosti pre rozdelenie zoznamu kanálov
+    invitedChannels() {
+      const currentNick = this.authStore.currentUser || '';
+      return (this.selectedServer?.channels || [])
+        .filter((c: ChannelItem) => Array.isArray(c.invited) && c.invited.includes(currentNick) && (!Array.isArray(c.members) || !c.members.includes(currentNick)))
+        .map((c: ChannelItem) => ({
+          ...c,
+          isInvited: true,
+          isAdmin: c.admin === currentNick,
+        }));
+    },
+
+    regularChannels() {
+      const currentNick = this.authStore.currentUser || '';
+      return (this.selectedServer?.channels || [])
+        .filter((c: ChannelItem) => !Array.isArray(c.invited) || !c.invited.includes(currentNick) || (Array.isArray(c.members) && c.members.includes(currentNick)))
+        .map((c: ChannelItem) => ({
+          ...c,
+          isInvited: false,
+          isAdmin: c.admin === currentNick,
+        }));
     },
   },
 
@@ -310,46 +279,49 @@ export default defineComponent({
       await this.$router.push('/login');
     },
 
-    selectServer(id: number) {
-      this.selectedServerId = id;
+    async selectServer(id: number) {
+      this.chatStore.selectServer(id);
+      const firstChannel = this.chatStore.currentServer?.channels[0]?.name || 'všeobecný';
+      await this.$router.push('/' + firstChannel);
+    },
+
+    async createServerPrompt() {
+      const name = prompt('Názov nového servera (alebo použi príkaz /create <nazov> [private]):');
+      if (!name) return;
+      const isPrivate = confirm('Má byť server súkromný? (OK = Áno, Zrušiť = Nie)');
+      const res = this.chatStore.executeCommand('všeobecný', `/create ${name} ${isPrivate ? 'private' : ''}`);
+      if (res.redirectUrl) {
+        await this.$router.push(res.redirectUrl);
+      }
     },
 
     // --- Akcie pre kanály ---
     async createChannel() {
-      const name = prompt('Názov nového kanála:');
+      const name = prompt('Názov nového kanála (alebo použi príkaz /join <nazov> [private]):');
       if (!name) return;
-
       const isPrivate = confirm('Má byť kanál súkromný? (OK = Áno, Zrušiť = Nie)');
-
-      const formattedName = name.toLowerCase().replace(/\s+/g, '-');
-
-      this.selectedServer.channels.push({
-        id: Date.now(),
-        name: formattedName,
-        type: isPrivate ? 'private' : 'public',
-        isInvited: false,
-        isAdmin: true // Vytvoril si ho, takže si správca
-      });
-
-      // Redirect to newly created channel
-      await this.$router.push('/' + formattedName);
-    },
-
-    leaveChannel(id: number) {
-      if (confirm('Naozaj chceš opustiť tento kanál?')) {
-        this.removeChannel(id);
+      const res = this.chatStore.executeCommand(this.selectedServer?.channels[0]?.name || 'všeobecný', `/join ${name} ${isPrivate ? 'private' : ''}`);
+      if (res.redirectUrl) {
+        await this.$router.push(res.redirectUrl);
       }
     },
 
-    deleteChannel(id: number) {
-      if (confirm('Naozaj chceš zmazať tento kanál? Ako správca ho vymažeš natrvalo.')) {
-        this.removeChannel(id);
+    async leaveChannel(channelName: string) {
+      if (confirm(`Naozaj chceš opustiť kanál #${channelName}? (zrušiť členstvo)`)) {
+        const res = this.chatStore.executeCommand(channelName, '/cancel');
+        if (res.redirectUrl) {
+          await this.$router.push(res.redirectUrl);
+        }
       }
     },
 
-    removeChannel(id: number) {
-      const server = this.selectedServer;
-      server.channels = server.channels.filter(c => c.id !== id);
+    async deleteChannel(channelName: string) {
+      if (confirm(`Naozaj chceš zrušiť kanál #${channelName}? Ako správca ho zrušíš natrvalo.`)) {
+        const res = this.chatStore.executeCommand(channelName, '/quit');
+        if (res.redirectUrl) {
+          await this.$router.push(res.redirectUrl);
+        }
+      }
     },
   },
 });

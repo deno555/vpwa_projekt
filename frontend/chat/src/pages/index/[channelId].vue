@@ -169,19 +169,26 @@
 									'msg-mentioned': isMessageMentioned(msg),
 								}"
 							>
-								<q-avatar
-									size="40px"
-									:color="
-										msg.isSystem ? 'amber-9' : isMessageMentioned(msg) ? 'amber-8' : 'primary'
-									"
-									text-color="white"
-									class="q-mr-md msg-avatar"
-									:icon="msg.isSystem ? 'terminal' : undefined"
-								>
-									<template v-if="!msg.isSystem">
-										{{ msg.author.charAt(0).toUpperCase() }}
-									</template>
-								</q-avatar>
+								<div class="avatar-wrapper q-mr-md msg-avatar">
+									<q-avatar
+										size="40px"
+										:color="
+											msg.isSystem ? 'amber-9' : isMessageMentioned(msg) ? 'amber-8' : 'primary'
+										"
+										text-color="white"
+										:icon="msg.isSystem ? 'terminal' : undefined"
+									>
+										<template v-if="!msg.isSystem">
+											{{ msg.author.charAt(0).toUpperCase() }}
+										</template>
+									</q-avatar>
+									<span
+										v-if="!msg.isSystem"
+										class="status-dot status-dot--msg"
+										:style="{ backgroundColor: statusOption(msg.author).color }"
+										:title="statusOption(msg.author).label"
+									/>
+								</div>
 								<div class="col" style="min-width: 0">
 									<div class="flex items-center q-mb-xs">
 										<span
@@ -338,9 +345,16 @@
 								:title="`Klikni pre označenie @${channelAdmin}`"
 							>
 								<q-item-section avatar style="min-width: 36px; padding-right: 8px">
-									<q-avatar size="28px" color="amber-9" text-color="black" class="text-weight-bold">
-										{{ channelAdmin.charAt(0).toUpperCase() }}
-									</q-avatar>
+									<div class="avatar-wrapper">
+										<q-avatar size="28px" color="amber-9" text-color="black" class="text-weight-bold">
+											{{ channelAdmin.charAt(0).toUpperCase() }}
+										</q-avatar>
+										<span
+											class="status-dot"
+											:style="{ backgroundColor: statusOption(channelAdmin).color }"
+											:title="statusOption(channelAdmin).label"
+										/>
+									</div>
 								</q-item-section>
 								<q-item-section>
 									<div class="row items-center no-wrap">
@@ -371,6 +385,7 @@
 													? 'Vlastník servera & Správca'
 													: 'Správca'
 										}}
+										• {{ statusOption(channelAdmin).label }}
 									</div>
 								</q-item-section>
 							</q-item>
@@ -393,9 +408,16 @@
 								:title="`Klikni pre označenie @${member}`"
 							>
 								<q-item-section avatar style="min-width: 36px; padding-right: 8px">
-									<q-avatar size="28px" color="primary" text-color="white" class="text-weight-bold">
-										{{ member.charAt(0).toUpperCase() }}
-									</q-avatar>
+									<div class="avatar-wrapper">
+										<q-avatar size="28px" color="primary" text-color="white" class="text-weight-bold">
+											{{ member.charAt(0).toUpperCase() }}
+										</q-avatar>
+										<span
+											class="status-dot"
+											:style="{ backgroundColor: statusOption(member).color }"
+											:title="statusOption(member).label"
+										/>
+									</div>
 								</q-item-section>
 								<q-item-section>
 									<div class="row items-center no-wrap">
@@ -421,7 +443,8 @@
 										</q-badge>
 									</div>
 									<div class="text-caption text-grey-5" style="font-size: 11px">
-										{{ isServerOwnerName(member) ? 'Vlastník servera' : 'Člen' }}
+										{{ isServerOwnerName(member) ? 'Vlastník servera' : 'Člen' }} •
+										{{ statusOption(member).label }}
 									</div>
 								</q-item-section>
 							</q-item>
@@ -473,7 +496,7 @@
 <script lang="ts">
 import { defineComponent } from 'vue';
 import { mapStores } from 'pinia';
-import { isSameUser, useChatStore, useAuthStore } from '@/stores/store';
+import { isSameUser, STATUS_OPTIONS, useChatStore, useAuthStore } from '@/stores/store';
 import {
 	isUserMentioned,
 	renderMessageHtml,
@@ -589,6 +612,10 @@ export default defineComponent({
 			return this.chatStore.messagesFor(this.channelName);
 		},
 
+		lastMessageId(): number | undefined {
+			return this.currentMessages[this.currentMessages.length - 1]?.id;
+		},
+
 		activeTypingUsers(): string[] {
 			// Ticker zabezpečuje pravidelné prehodnotenie expirácie
 			void this.ticker;
@@ -645,10 +672,12 @@ export default defineComponent({
 			this.stopTyping();
 			this.scrollToBottom();
 		},
-		'currentMessages.length'() {
-			void this.$nextTick(() => {
-				this.scrollToBottom();
-			});
+		// Po každej novej správe (vlastnej aj cudzej) scrollneme na ňu
+		lastMessageId: {
+			handler() {
+				this.scrollToBottom(true);
+			},
+			flush: 'post',
 		},
 	},
 
@@ -672,11 +701,15 @@ export default defineComponent({
 	},
 
 	methods: {
-		scrollToBottom() {
-			const scrollArea = this.$refs.chatScroll as QScrollArea | undefined;
-			if (scrollArea) {
-				scrollArea.setScrollPercentage('vertical', 1);
-			}
+		scrollToBottom(smooth = false) {
+			// setScrollPercentage počíta s rozmermi, ktoré QScrollArea meria asynchrónne,
+			// takže by skončil nad práve pridanou správou. Scrollujeme priamo na scrollHeight.
+			void this.$nextTick(() => {
+				const scrollArea = this.$refs.chatScroll as QScrollArea | undefined;
+				if (!scrollArea) return;
+				const target = scrollArea.getScrollTarget();
+				scrollArea.setScrollPosition('vertical', target.scrollHeight, smooth ? 200 : 0);
+			});
 		},
 
 		onInputUpdate(val: string | number | null) {
@@ -824,6 +857,11 @@ export default defineComponent({
 
 		isServerOwnerName(name: string): boolean {
 			return isSameUser(name, this.currentServer?.admin);
+		},
+
+		statusOption(username: string): { value: string; label: string; color: string } {
+			const status = this.chatStore.statusOf(username);
+			return STATUS_OPTIONS.find((o) => o.value === status) ?? STATUS_OPTIONS[2]!;
 		},
 	},
 });
@@ -981,5 +1019,33 @@ export default defineComponent({
 
 .member-item--invited {
 	opacity: 0.7;
+}
+
+/* Stav používateľa (bodka pri avatare) */
+.avatar-wrapper {
+	position: relative;
+	flex-shrink: 0;
+	align-self: flex-start;
+}
+
+.status-dot {
+	position: absolute;
+	right: -2px;
+	bottom: -2px;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	border: 2px solid #2b2d31;
+	box-sizing: content-box;
+}
+
+.status-dot--msg {
+	width: 12px;
+	height: 12px;
+	border: 3px solid #313338;
+}
+
+.msg-row:hover .status-dot--msg {
+	border-color: #2b2d31;
 }
 </style>

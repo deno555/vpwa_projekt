@@ -28,6 +28,32 @@ export function userListIncludes(list, user) {
 	return list.some((item) => String(item).trim().toLowerCase() === target);
 }
 
+// --- Stav používateľa ---
+
+/** @typedef {'online' | 'dnd' | 'offline'} UserStatus */
+
+/** @type {{ value: UserStatus, label: string, color: string }[]} */
+export const STATUS_OPTIONS = [
+	{ value: 'online', label: 'Online', color: '#23a55a' },
+	{ value: 'dnd', label: 'Nerušiť', color: '#f23f43' },
+	{ value: 'offline', label: 'Offline', color: '#80848e' },
+];
+
+function statusKey(username) {
+	return String(username || '')
+		.trim()
+		.toLowerCase();
+}
+
+/** @returns {Record<string, UserStatus>} */
+function loadStoredStatuses() {
+	try {
+		return JSON.parse(localStorage.getItem('userStatuses') || '{}') || {};
+	} catch {
+		return {};
+	}
+}
+
 export const useAuthStore = defineStore('auth', {
 	state: () => ({
 		/** @type {string | null} */
@@ -367,7 +393,30 @@ function loadStoredServers() {
 	}
 }
 
-const savedHistory = localStorage.getItem('chatHistory');
+/** @returns {Record<string, Message[]>} */
+function loadStoredHistory() {
+	try {
+		return JSON.parse(localStorage.getItem('chatHistory') || '{}') || {};
+	} catch {
+		return {};
+	}
+}
+
+/**
+ * Uloží históriu zlúčenú s tou, ktorá už je v localStorage, aby karta so starou
+ * kópiou (napr. offline používateľ) neprepísala správy, ktoré medzitým pribudli.
+ * @param {Record<string, Message[]>} history
+ */
+function persistHistory(history) {
+	const merged = loadStoredHistory();
+	for (const [channel, messages] of Object.entries(history)) {
+		const stored = merged[channel] || [];
+		const storedIds = new Set(stored.map((m) => m.id));
+		merged[channel] = [...stored, ...messages.filter((m) => !storedIds.has(m.id))];
+	}
+	localStorage.setItem('chatHistory', JSON.stringify(merged));
+}
+
 const savedSelectedServerId = localStorage.getItem('chatSelectedServerId');
 
 let bc = null;
@@ -382,14 +431,23 @@ if (typeof window !== 'undefined' && typeof window.BroadcastChannel !== 'undefin
 export const useChatStore = defineStore('chat', {
 	state: () => ({
 		/** @type {Record<string, Message[]>} */
-		history: savedHistory ? JSON.parse(savedHistory) : {},
+		history: loadStoredHistory(),
 		/** @type {Record<string, Record<string, number>>} */
 		typingUsers: {},
 		/** @type {Server[]} */
 		servers: loadStoredServers(),
 		selectedServerId: savedSelectedServerId ? Number(savedSelectedServerId) : INITIAL_SERVERS[0].id,
+		/** @type {Record<string, UserStatus>} */
+		userStatuses: loadStoredStatuses(),
 	}),
 	getters: {
+		statusOf: (state) => (/** @type {string} */ username) =>
+			state.userStatuses[statusKey(username)] || 'offline',
+		/** @returns {UserStatus} */
+		currentUserStatus() {
+			const auth = useAuthStore();
+			return this.statusOf(auth.currentUser || '');
+		},
 		visibleServers: (state) => {
 			const auth = useAuthStore();
 			const currentUser = auth.currentUser;
@@ -537,6 +595,47 @@ export const useChatStore = defineStore('chat', {
 		},
 
 		/**
+		 * Nastaví stav používateľa, uloží ho a rozpošle ostatným kartám.
+		 * @param {string} username
+		 * @param {UserStatus} status
+		 */
+		setUserStatus(username, status) {
+			if (!username) return;
+			this.applyUserStatus(username, status);
+			const stored = loadStoredStatuses();
+			stored[statusKey(username)] = status;
+			localStorage.setItem('userStatuses', JSON.stringify(stored));
+			if (bc) {
+				try {
+					bc.postMessage({ type: 'status_updated', username, status });
+				} catch {
+					// ignore
+				}
+			}
+		},
+
+		/**
+		 * @param {string} username
+		 * @param {UserStatus} status
+		 */
+		applyUserStatus(username, status) {
+			const key = statusKey(username);
+			const prev = this.userStatuses[key];
+			this.userStatuses = { ...this.userStatuses, [key]: status };
+
+			// Po návrate z offline načítame, čo medzitým pribudlo
+			const auth = useAuthStore();
+			if (prev === 'offline' && status !== 'offline' && isSameUser(username, auth.currentUser)) {
+				this.reloadFromStorage();
+			}
+		},
+
+		reloadFromStorage() {
+			this.history = loadStoredHistory();
+			this.servers = loadStoredServers();
+		},
+
+		/**
 		 * @param {string} channel
 		 * @param {string} text
 		 */
@@ -552,7 +651,7 @@ export const useChatStore = defineStore('chat', {
 				isSystem: true,
 			};
 			this.history[channel].push(msg);
-			localStorage.setItem('chatHistory', JSON.stringify(this.history));
+			persistHistory(this.history);
 			if (bc) {
 				try {
 					bc.postMessage({
@@ -649,7 +748,7 @@ export const useChatStore = defineStore('chat', {
 			};
 
 			this.history[channel].push(msg);
-			localStorage.setItem('chatHistory', JSON.stringify(this.history));
+			persistHistory(this.history);
 
 			if (bc) {
 				try {
@@ -664,7 +763,11 @@ export const useChatStore = defineStore('chat', {
 			}
 
 			// Ak správa obsahuje @zmienku pre odosielateľa (napr. testovanie pingu samého seba)
-			if (currentUser && isUserMentioned(msg.text, currentUser)) {
+			if (
+				this.currentUserStatus === 'online' &&
+				currentUser &&
+				isUserMentioned(msg.text, currentUser)
+			) {
 				triggerPing(channel, msg);
 			}
 		},
@@ -679,7 +782,7 @@ export const useChatStore = defineStore('chat', {
 			}
 			if (!this.history[channel].some((m) => m.id === message.id)) {
 				this.history[channel].push(message);
-				localStorage.setItem('chatHistory', JSON.stringify(this.history));
+				persistHistory(this.history);
 			}
 		},
 
@@ -1361,27 +1464,54 @@ if (bc) {
 		const data = event.data;
 		if (!data) return;
 		const chatStore = useChatStore();
+		// Offline používateľ nedostáva správy ani typing (načítajú sa po prepnutí na online)
+		const isOffline = chatStore.currentUserStatus === 'offline';
 		if (data.type === 'typing') {
+			if (isOffline) return;
 			chatStore.applyTyping(data.channel, data.username, data.isTyping, data.time);
 		} else if (data.type === 'new_message') {
+			if (isOffline) return;
 			chatStore.applyNewMessage(data.channel, data.message);
 			const auth = useAuthStore();
-			if (auth.currentUser && isUserMentioned(data.message.text, auth.currentUser)) {
+			// V stave "nerušiť" sa notifikácie nezobrazujú
+			if (
+				chatStore.currentUserStatus === 'online' &&
+				auth.currentUser &&
+				isUserMentioned(data.message.text, auth.currentUser)
+			) {
 				triggerPing(data.channel, data.message);
 			}
 		} else if (data.type === 'servers_updated') {
 			chatStore.servers = data.servers;
 			chatStore.selectedServerId = data.selectedServerId;
+		} else if (data.type === 'status_updated') {
+			chatStore.applyUserStatus(data.username, data.status);
 		}
 	};
 }
 
 if (typeof window !== 'undefined') {
 	window.addEventListener('storage', (event) => {
+		if (event.key === 'userStatuses' && event.newValue) {
+			try {
+				const store = useChatStore();
+				const statuses = JSON.parse(event.newValue) || {};
+				for (const [username, status] of Object.entries(statuses)) {
+					if (store.userStatuses[username] !== status) {
+						store.applyUserStatus(username, status);
+					}
+				}
+			} catch {
+				// ignore
+			}
+		}
 		if (event.key === 'chatHistory' && event.newValue) {
 			try {
 				const store = useChatStore();
-				store.history = JSON.parse(event.newValue);
+				// Offline používateľ správy nedostáva
+				if (store.currentUserStatus !== 'offline') {
+					store.history = JSON.parse(event.newValue);
+				}
 			} catch {
 				// ignore
 			}

@@ -311,7 +311,7 @@
 									:key="option.value"
 									clickable
 									v-close-popup
-									:active="option.value === currentUser.status"
+									:active="option.value === currentStatus.value"
 									active-class="bg-grey-9"
 									@click="setStatus(option.value)"
 								>
@@ -366,7 +366,7 @@
 import { defineComponent } from 'vue';
 import { mapStores } from 'pinia';
 import { Dialog } from 'quasar';
-import { useAuthStore, useChatStore } from '@/stores/store';
+import { STATUS_OPTIONS, useAuthStore, useChatStore } from '@/stores/store';
 
 // --- Quasar dialógy namiesto alert / confirm / prompt ---
 function showAlert(message: string, title = 'Upozornenie'): Promise<void> {
@@ -437,7 +437,7 @@ function showVisibilityPicker(title: string): Promise<'public' | 'private' | nul
 	});
 }
 
-// --- Používateľ a jeho stav ---
+// --- Stav používateľa ---
 type UserStatus = 'online' | 'dnd' | 'offline';
 
 interface StatusOption {
@@ -445,12 +445,6 @@ interface StatusOption {
 	label: string;
 	color: string;
 }
-
-const STATUS_OPTIONS: StatusOption[] = [
-	{ value: 'online', label: 'Online', color: '#23a55a' },
-	{ value: 'dnd', label: 'Nerušiť', color: '#f23f43' },
-	{ value: 'offline', label: 'Offline', color: '#80848e' },
-];
 
 interface ChannelItem {
 	id: number;
@@ -476,26 +470,26 @@ export default defineComponent({
 	name: 'MainLayout',
 
 	data() {
-		const currentUser: { username: string; status: UserStatus } = {
-			username: useAuthStore().currentUser || 'Neznámy',
-			status: 'online',
-		};
-
 		return {
 			leftDrawerOpen: true,
 			statusOptions: STATUS_OPTIONS,
-			currentUser,
 		};
+	},
+
+	created() {
+		// Používateľ bez uloženého stavu je po prihlásení online
+		const username = this.authStore.currentUser;
+		if (username && !this.chatStore.userStatuses[username.trim().toLowerCase()]) {
+			this.chatStore.setUserStatus(username, 'online');
+		}
 	},
 
 	computed: {
 		...mapStores(useAuthStore, useChatStore),
 
 		currentStatus(): StatusOption {
-			return (
-				this.statusOptions.find((o) => o.value === this.currentUser.status) ??
-				this.statusOptions[0]!
-			);
+			const status = this.chatStore.currentUserStatus;
+			return this.statusOptions.find((o) => o.value === status) ?? this.statusOptions[0]!;
 		},
 
 		servers(): ServerItem[] {
@@ -575,7 +569,7 @@ export default defineComponent({
 
 	methods: {
 		setStatus(status: UserStatus) {
-			this.currentUser.status = status;
+			this.chatStore.setUserStatus(this.currentUsername, status);
 		},
 
 		hasChannelAccess(channel: ChannelItem): boolean {

@@ -1001,7 +1001,33 @@ export const useChatStore = defineStore('chat', {
           }
         }
 
-        // --- 9. /help ---
+        // --- 9. /list (zoznam členov kanála) ---
+        case 'list': {
+          if (!currentChannel) {
+            return { success: false, message: 'Nie si v žiadnom kanáli.' }
+          }
+
+          if (!Array.isArray(currentChannel.members) || !currentChannel.members.includes(currentUser)) {
+            return {
+              success: false,
+              message: `Musíš byť členom kanála #${currentChannel.name}, aby si si mohol pozrieť zoznam členov.`,
+            }
+          }
+
+          const members = Array.isArray(currentChannel.members) ? currentChannel.members : []
+          const formatted = members
+            .map((m) => (m === currentChannel.admin ? `👑 ${m} (správca)` : `• ${m}`))
+            .join('\n')
+
+          const message = `Zoznam členov kanála #${currentChannel.name} (${members.length}):\n${formatted}`
+
+          return {
+            success: true,
+            message,
+          }
+        }
+
+        // --- 10. /help ---
         case 'help': {
           const helpText = [
             'Dostupné príkazy príkazového riadka:',
@@ -1013,6 +1039,7 @@ export const useChatStore = defineStore('chat', {
             '• /kick <nickName> – vyhodenie používateľa (3 hlasy = trvalý ban; správca = okamžitý trvalý ban)',
             '• /quit – zatvorenie/zrušenie kanála (iba správca kanála)',
             '• /cancel – zrušenie vlastného členstva (ak si správca, kanál zaniká)',
+            '• /list – zobrazenie zoznamu členov aktuálneho kanála',
           ].join('\n')
 
           return {

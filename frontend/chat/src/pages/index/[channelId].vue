@@ -27,7 +27,16 @@
         @click="toggleDesktopNotifications"
       />
       <q-btn flat round dense icon="push_pin" color="grey-5" class="q-mr-sm" />
-      <q-btn flat round dense icon="people_alt" color="grey-5" />
+      <q-btn
+        flat
+        round
+        dense
+        icon="people_alt"
+        :color="showMembers ? 'white' : 'grey-5'"
+        :class="{ 'bg-grey-9': showMembers }"
+        title="Používatelia s prístupom do kanála (/list)"
+        @click="toggleMembers"
+      />
     </q-toolbar>
 
     <!-- Unauthorized / Access Denied -->
@@ -63,120 +72,241 @@
         <span class="text-caption">V tomto kanáli máš trvalý ban. Správy nemôžeš odosielať.</span>
       </div>
 
-      <!-- Chat Messages Area -->
-      <q-scroll-area ref="chatScroll" class="col q-pa-md bg-discord-main">
-        <div class="column justify-end" style="min-height: 100%;">
-          <div class="text-center q-my-xl">
-            <q-avatar size="72px" color="grey-8" text-color="white" :icon="currentChannel?.type === 'private' ? 'lock' : 'tag'" class="q-mb-md" />
-            <div class="text-h4 text-weight-bold text-white q-mb-sm">Vitaj v #{{ channelName }}!</div>
-            <div class="text-grey-5">Toto je začiatok histórie tohto kanála. Príkazy zadávaj cez príkazový riadok dole.</div>
-          </div>
-
-          <!-- Messages -->
-          <div
-            v-for="msg in currentMessages"
-            :key="msg.id"
-            class="q-mb-sm flex q-py-xs msg-row"
-            :class="{
-              'system-msg-box': msg.isSystem,
-              'msg-mentioned': isMessageMentioned(msg)
-            }"
-          >
-            <q-avatar
-              size="40px"
-              :color="msg.isSystem ? 'amber-9' : isMessageMentioned(msg) ? 'amber-8' : 'primary'"
-              text-color="white"
-              class="q-mr-md msg-avatar"
-              :icon="msg.isSystem ? 'terminal' : undefined"
-            >
-              <template v-if="!msg.isSystem">
-                {{ msg.author.charAt(0).toUpperCase() }}
-              </template>
-            </q-avatar>
-            <div class="col" style="min-width: 0;">
-              <div class="flex items-center q-mb-xs">
-                <span
-                  class="text-weight-bold q-mr-sm author-name"
-                  :class="msg.isSystem ? 'text-amber-4' : isMessageMentioned(msg) ? 'text-amber-3' : 'text-white'"
-                  @click="insertMention(msg.author)"
-                  :title="msg.isSystem ? undefined : `Klikni pre označenie @${msg.author}`"
-                >
-                  {{ msg.author }}
-                </span>
-                <span class="text-grey-5 text-caption">Dnes o {{ msg.time }}</span>
-                <q-badge
-                  v-if="isMessageMentioned(msg)"
-                  color="amber-8"
-                  text-color="black"
-                  class="q-ml-sm text-weight-bold mention-badge"
-                >
-                  @ping
-                </q-badge>
+      <!-- Main Chat Body with Optional Members Sidebar -->
+      <div class="row no-wrap col" style="min-height: 0;">
+        <!-- Left: Chat Messages Area + Input Area -->
+        <div class="column col" style="min-height: 0;">
+          <!-- Chat Messages Area -->
+          <q-scroll-area ref="chatScroll" class="col q-pa-md bg-discord-main">
+            <div class="column justify-end" style="min-height: 100%;">
+              <div class="text-center q-my-xl">
+                <q-avatar size="72px" color="grey-8" text-color="white" :icon="currentChannel?.type === 'private' ? 'lock' : 'tag'" class="q-mb-md" />
+                <div class="text-h4 text-weight-bold text-white q-mb-sm">Vitaj v #{{ channelName }}!</div>
+                <div class="text-grey-5">Toto je začiatok histórie tohto kanála. Príkazy zadávaj cez príkazový riadok dole.</div>
               </div>
+
+              <!-- Messages -->
               <div
-                :class="msg.isSystem ? 'text-amber-2' : 'text-grey-3'"
-                class="msg-content"
-                v-html="formatMessage(msg.text)"
-              />
+                v-for="msg in currentMessages"
+                :key="msg.id"
+                class="q-mb-sm flex q-py-xs msg-row"
+                :class="{
+                  'system-msg-box': msg.isSystem,
+                  'msg-mentioned': isMessageMentioned(msg)
+                }"
+              >
+                <q-avatar
+                  size="40px"
+                  :color="msg.isSystem ? 'amber-9' : isMessageMentioned(msg) ? 'amber-8' : 'primary'"
+                  text-color="white"
+                  class="q-mr-md msg-avatar"
+                  :icon="msg.isSystem ? 'terminal' : undefined"
+                >
+                  <template v-if="!msg.isSystem">
+                    {{ msg.author.charAt(0).toUpperCase() }}
+                  </template>
+                </q-avatar>
+                <div class="col" style="min-width: 0;">
+                  <div class="flex items-center q-mb-xs">
+                    <span
+                      class="text-weight-bold q-mr-sm author-name"
+                      :class="msg.isSystem ? 'text-amber-4' : isMessageMentioned(msg) ? 'text-amber-3' : 'text-white'"
+                      @click="insertMention(msg.author)"
+                      :title="msg.isSystem ? undefined : `Klikni pre označenie @${msg.author}`"
+                    >
+                      {{ msg.author }}
+                    </span>
+                    <span class="text-grey-5 text-caption">Dnes o {{ msg.time }}</span>
+                    <q-badge
+                      v-if="isMessageMentioned(msg)"
+                      color="amber-8"
+                      text-color="black"
+                      class="q-ml-sm text-weight-bold mention-badge"
+                    >
+                      @ping
+                    </q-badge>
+                  </div>
+                  <div
+                    :class="msg.isSystem ? 'text-amber-2' : 'text-grey-3'"
+                    class="msg-content"
+                    v-html="formatMessage(msg.text)"
+                  />
+                </div>
+              </div>
+            </div>
+          </q-scroll-area>
+
+          <!-- Message Input Area (Príkazový riadok) -->
+          <div class="bg-discord-main q-px-md q-pt-xs q-pb-sm">
+            <!-- Quick mention helper chips if user is typing '@' -->
+            <div v-if="mentionSuggestions.length > 0" class="row items-center q-gutter-xs q-mb-xs q-px-xs">
+              <span class="text-caption text-grey-5 q-mr-xs">Označiť:</span>
+              <q-chip
+                v-for="user in mentionSuggestions"
+                :key="user"
+                clickable
+                dense
+                size="sm"
+                color="primary"
+                text-color="white"
+                icon="alternate_email"
+                @click="applyMentionSuggestion(user)"
+              >
+                {{ user }}
+              </q-chip>
+            </div>
+
+            <q-input
+              v-model="newMessage"
+              dense
+              standout="bg-grey-9"
+              bg-color="grey-9"
+              dark
+              rounded
+              :placeholder="inputPlaceholder"
+              class="full-width"
+              @keyup.enter="sendMessage"
+              @update:model-value="onInputUpdate"
+            >
+              <template #prepend>
+                <q-btn flat round dense icon="terminal" color="amber-5" title="Príkazy terminálu (/help)" @click="showHelp" />
+              </template>
+              <template #append>
+                <q-btn flat round dense icon="send" color="primary" @click="sendMessage" title="Odoslať správu / príkaz" />
+                <q-btn flat round dense icon="emoji_emotions" color="grey-5" />
+              </template>
+            </q-input>
+
+            <!-- Typing indicator -->
+            <div class="typing-bar row items-center q-px-xs">
+              <transition name="typing-fade">
+                <div v-if="typingText" class="row items-center text-caption text-grey-4">
+                  <span class="typing-dots q-mr-xs">
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                  </span>
+                  <span class="text-weight-bold text-white q-mr-xs">{{ typingUserText }}</span>
+                  <span>{{ typingSuffix }}</span>
+                </div>
+              </transition>
             </div>
           </div>
         </div>
-      </q-scroll-area>
 
-      <!-- Message Input Area (Príkazový riadok) -->
-      <div class="bg-discord-main q-px-md q-pt-xs q-pb-sm">
-        <!-- Quick mention helper chips if user is typing '@' -->
-        <div v-if="mentionSuggestions.length > 0" class="row items-center q-gutter-xs q-mb-xs q-px-xs">
-          <span class="text-caption text-grey-5 q-mr-xs">Označiť:</span>
-          <q-chip
-            v-for="user in mentionSuggestions"
-            :key="user"
-            clickable
-            dense
-            size="sm"
-            color="primary"
-            text-color="white"
-            icon="alternate_email"
-            @click="applyMentionSuggestion(user)"
-          >
-            {{ user }}
-          </q-chip>
-        </div>
-
-        <q-input
-          v-model="newMessage"
-          dense
-          standout="bg-grey-9"
-          bg-color="grey-9"
-          dark
-          rounded
-          :placeholder="inputPlaceholder"
-          class="full-width"
-          @keyup.enter="sendMessage"
-          @update:model-value="onInputUpdate"
+        <!-- Right: Members Sidebar (Toggleable via people_alt or /list) -->
+        <div
+          v-if="showMembers"
+          class="members-sidebar col-auto column"
+          style="width: 240px; border-left: 1px solid #1e1f22; background-color: #2b2d31;"
         >
-          <template #prepend>
-            <q-btn flat round dense icon="terminal" color="amber-5" title="Príkazy terminálu (/help)" @click="showHelp" />
-          </template>
-          <template #append>
-            <q-btn flat round dense icon="send" color="primary" @click="sendMessage" title="Odoslať správu / príkaz" />
-            <q-btn flat round dense icon="emoji_emotions" color="grey-5" />
-          </template>
-        </q-input>
+          <!-- Sidebar Header -->
+          <div class="row items-center justify-between q-px-md q-pt-md q-pb-xs">
+            <span class="text-overline text-grey-4" style="line-height: 1;">
+              ČLENOVIA — {{ channelMembers.length }}
+            </span>
+            <q-btn flat round dense icon="close" size="xs" color="grey-5" @click="showMembers = false" title="Zatvoriť zoznam" />
+          </div>
 
-        <!-- Typing indicator -->
-        <div class="typing-bar row items-center q-px-xs">
-          <transition name="typing-fade">
-            <div v-if="typingText" class="row items-center text-caption text-grey-4">
-              <span class="typing-dots q-mr-xs">
-                <span class="dot"></span>
-                <span class="dot"></span>
-                <span class="dot"></span>
-              </span>
-              <span class="text-weight-bold text-white q-mr-xs">{{ typingUserText }}</span>
-              <span>{{ typingSuffix }}</span>
-            </div>
-          </transition>
+          <!-- Scroll Area for Members -->
+          <q-scroll-area class="col" :horizontal-thumb-style="{ opacity: '0' }">
+            <q-list dense class="q-py-xs">
+              <!-- Správca -->
+              <div v-if="channelAdmin" class="text-overline text-grey-5 q-px-md q-pt-xs" style="font-size: 10px;">
+                SPRÁVCA
+              </div>
+              <q-item
+                v-if="channelAdmin"
+                clickable
+                v-ripple
+                class="member-item rounded-borders q-mx-xs q-mb-xs"
+                @click="insertMention(channelAdmin)"
+                :title="`Klikni pre označenie @${channelAdmin}`"
+              >
+                <q-item-section avatar style="min-width: 36px; padding-right: 8px;">
+                  <q-avatar size="28px" color="amber-9" text-color="black" class="text-weight-bold">
+                    {{ channelAdmin.charAt(0).toUpperCase() }}
+                  </q-avatar>
+                </q-item-section>
+                <q-item-section>
+                  <div class="row items-center no-wrap">
+                    <span class="text-weight-bold text-amber-3 ellipsis">{{ channelAdmin }}</span>
+                    <q-icon name="stars" size="14px" color="amber-5" class="q-ml-xs" title="Správca kanála" />
+                  </div>
+                  <div class="text-caption text-grey-5" style="font-size: 11px;">
+                    {{ channelAdmin === currentUsername ? 'Vy • Správca' : 'Správca' }}
+                  </div>
+                </q-item-section>
+              </q-item>
+
+              <!-- Ostatní členovia -->
+              <div v-if="regularMembers.length > 0" class="text-overline text-grey-5 q-px-md q-pt-sm" style="font-size: 10px;">
+                ČLENOVIA — {{ regularMembers.length }}
+              </div>
+              <q-item
+                v-for="member in regularMembers"
+                :key="member"
+                clickable
+                v-ripple
+                class="member-item rounded-borders q-mx-xs q-mb-xs"
+                @click="insertMention(member)"
+                :title="`Klikni pre označenie @${member}`"
+              >
+                <q-item-section avatar style="min-width: 36px; padding-right: 8px;">
+                  <q-avatar size="28px" color="primary" text-color="white" class="text-weight-bold">
+                    {{ member.charAt(0).toUpperCase() }}
+                  </q-avatar>
+                </q-item-section>
+                <q-item-section>
+                  <div class="row items-center no-wrap">
+                    <span class="text-white ellipsis">{{ member }}</span>
+                    <q-badge
+                      v-if="member === currentUsername"
+                      color="grey-8"
+                      text-color="grey-4"
+                      class="q-ml-xs text-weight-bold"
+                      style="font-size: 9px;"
+                    >
+                      Vy
+                    </q-badge>
+                  </div>
+                  <div class="text-caption text-grey-5" style="font-size: 11px;">
+                    Člen
+                  </div>
+                </q-item-section>
+              </q-item>
+
+              <!-- Pozvaní do súkromného kanála (ak existujú) -->
+              <template v-if="invitedMembers.length > 0">
+                <div class="text-overline text-grey-5 q-px-md q-pt-sm" style="font-size: 10px;">
+                  POZVANÍ — {{ invitedMembers.length }}
+                </div>
+                <q-item
+                  v-for="member in invitedMembers"
+                  :key="member"
+                  class="member-item member-item--invited rounded-borders q-mx-xs q-mb-xs"
+                >
+                  <q-item-section avatar style="min-width: 36px; padding-right: 8px;">
+                    <q-avatar size="28px" color="grey-8" text-color="grey-5">
+                      {{ member.charAt(0).toUpperCase() }}
+                    </q-avatar>
+                  </q-item-section>
+                  <q-item-section>
+                    <span class="text-grey-5 ellipsis">{{ member }}</span>
+                    <div class="text-caption text-grey-6" style="font-size: 10px;">
+                      Čaká na vstup
+                    </div>
+                  </q-item-section>
+                </q-item>
+              </template>
+            </q-list>
+          </q-scroll-area>
+
+          <!-- Sidebar Footer info -->
+          <div class="q-pa-sm text-caption text-grey-6 text-center" style="border-top: 1px solid #1e1f22; font-size: 11px;">
+            <q-icon :name="currentChannel?.type === 'private' ? 'lock' : 'public'" size="xs" class="q-mr-xs" />
+            {{ currentChannel?.type === 'private' ? 'Súkromný kanál' : 'Verejný kanál' }}
+          </div>
         </div>
       </div>
     </template>
@@ -209,6 +339,7 @@ export default defineComponent({
       cleanupInterval: null as ReturnType<typeof setInterval> | null,
       ticker: 0,
       notificationsEnabled: false,
+      showMembers: false,
     };
   },
 
@@ -230,6 +361,25 @@ export default defineComponent({
 
     currentChannel() {
       return this.channelInfo ? this.channelInfo.channel : null;
+    },
+
+    channelMembers(): string[] {
+      return Array.isArray(this.currentChannel?.members) ? this.currentChannel.members : [];
+    },
+
+    channelAdmin(): string {
+      return this.currentChannel?.admin || '';
+    },
+
+    regularMembers(): string[] {
+      const admin = this.channelAdmin;
+      return this.channelMembers.filter((m) => m !== admin);
+    },
+
+    invitedMembers(): string[] {
+      const invited = Array.isArray(this.currentChannel?.invited) ? this.currentChannel.invited : [];
+      const members = this.channelMembers;
+      return invited.filter((i) => !members.includes(i));
     },
 
     hasAccess(): boolean {
@@ -419,6 +569,9 @@ export default defineComponent({
         const res = this.chatStore.executeCommand(this.channelName, text);
         this.chatStore.addSystemMessage(this.channelName, res.message);
         this.newMessage = '';
+        if (text.toLowerCase().trim() === '/list') {
+          this.showMembers = true;
+        }
         if (res.redirectUrl) {
           void this.$router.push(res.redirectUrl);
         }
@@ -428,6 +581,10 @@ export default defineComponent({
       // Bežná správa v kanáli
       this.chatStore.sendMessage(this.channelName, text);
       this.newMessage = '';
+    },
+
+    toggleMembers() {
+      this.showMembers = !this.showMembers;
     },
 
     isMessageMentioned(msg: { text: string; isSystem?: boolean }): boolean {
@@ -596,5 +753,19 @@ export default defineComponent({
 .typing-fade-enter-from,
 .typing-fade-leave-to {
   opacity: 0;
+}
+
+/* Members sidebar item hover */
+.member-item {
+  transition: background-color 0.15s ease;
+  cursor: pointer;
+}
+
+.member-item:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.member-item--invited {
+  opacity: 0.7;
 }
 </style>

@@ -434,6 +434,8 @@ export const useChatStore = defineStore('chat', {
 		history: loadStoredHistory(),
 		/** @type {Record<string, Record<string, number>>} */
 		typingUsers: {},
+		/** @type {Record<string, Record<string, string>>} */
+		typingTexts: {},
 		/** @type {Server[]} */
 		servers: loadStoredServers(),
 		selectedServerId: savedSelectedServerId ? Number(savedSelectedServerId) : INITIAL_SERVERS[0].id,
@@ -486,6 +488,8 @@ export const useChatStore = defineStore('chat', {
 				.filter(([, timestamp]) => now - timestamp < 3500)
 				.map(([user]) => user);
 		},
+		typingTextOf: (state) => (/** @type {string} */ channel, /** @type {string} */ username) =>
+			state.typingTexts[channel]?.[username] || '',
 		isServerMember: () => (server, username) => {
 			if (!server || !username) return false;
 			return isSameUser(server.admin, username) || userListIncludes(server.members, username);
@@ -669,10 +673,11 @@ export const useChatStore = defineStore('chat', {
 		 * @param {string} channel
 		 * @param {string} username
 		 * @param {boolean} isTyping
+		 * @param {string} [text] rozpísaný text (náhľad pre ostatných)
 		 */
-		setTyping(channel, username, isTyping) {
+		setTyping(channel, username, isTyping, text = '') {
 			const time = Date.now();
-			this.applyTyping(channel, username, isTyping, time);
+			this.applyTyping(channel, username, isTyping, time, text);
 
 			if (bc) {
 				try {
@@ -681,6 +686,7 @@ export const useChatStore = defineStore('chat', {
 						channel,
 						username,
 						isTyping,
+						text: isTyping ? text : '',
 						time,
 					});
 				} catch {
@@ -694,18 +700,20 @@ export const useChatStore = defineStore('chat', {
 		 * @param {string} username
 		 * @param {boolean} isTyping
 		 * @param {number} [time]
+		 * @param {string} [text]
 		 */
-		applyTyping(channel, username, isTyping, time = Date.now()) {
-			if (!this.typingUsers[channel]) {
-				this.typingUsers[channel] = {};
-			}
+		applyTyping(channel, username, isTyping, time = Date.now(), text = '') {
 			const updated = { ...this.typingUsers[channel] };
+			const updatedTexts = { ...this.typingTexts[channel] };
 			if (isTyping) {
 				updated[username] = time;
+				updatedTexts[username] = text;
 			} else {
 				delete updated[username];
+				delete updatedTexts[username];
 			}
 			this.typingUsers[channel] = updated;
+			this.typingTexts[channel] = updatedTexts;
 		},
 
 		/**
@@ -1468,7 +1476,7 @@ if (bc) {
 		const isOffline = chatStore.currentUserStatus === 'offline';
 		if (data.type === 'typing') {
 			if (isOffline) return;
-			chatStore.applyTyping(data.channel, data.username, data.isTyping, data.time);
+			chatStore.applyTyping(data.channel, data.username, data.isTyping, data.time, data.text);
 		} else if (data.type === 'new_message') {
 			if (isOffline) return;
 			chatStore.applyNewMessage(data.channel, data.message);

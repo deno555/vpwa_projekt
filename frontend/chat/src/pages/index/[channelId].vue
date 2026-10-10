@@ -294,13 +294,78 @@
 										<span class="dot"></span>
 										<span class="dot"></span>
 									</span>
-									<span class="text-weight-bold text-white q-mr-xs">{{ typingUserText }}</span>
+									<template v-for="(user, index) in typingDisplayUsers" :key="user">
+										<span v-if="index > 0" class="q-mr-xs">{{
+											index === typingDisplayUsers.length - 1 && typingOtherUsers.length === 0
+												? ' and'
+												: ','
+										}}</span>
+										<span
+											class="text-weight-bold text-white typing-name"
+											:class="{ 'q-mr-xs': index === typingDisplayUsers.length - 1 }"
+											:title="`Klikni pre náhľad textu, ktorý ${user} píše`"
+											@click="openTypingPreview(user)"
+										>
+											{{ user }}
+										</span>
+									</template>
+									<span v-if="typingOtherUsers.length > 0" class="q-mr-xs">
+										and
+										<span class="text-weight-bold text-white typing-name">
+											others
+											<q-menu dark anchor="top left" self="bottom left">
+												<q-list dense style="min-width: 140px">
+													<q-item
+														v-for="user in typingOtherUsers"
+														:key="user"
+														clickable
+														v-close-popup
+														@click="openTypingPreview(user)"
+													>
+														<q-item-section>{{ user }}</q-item-section>
+													</q-item>
+												</q-list>
+											</q-menu>
+										</span>
+									</span>
 									<span>{{ typingSuffix }}</span>
 								</div>
 							</transition>
 						</div>
 					</div>
 				</div>
+
+				<!-- Náhľad rozpísaného textu (živý) -->
+				<q-dialog v-model="typingPreviewOpen" @hide="typingPreviewUser = ''">
+					<q-card dark class="typing-preview-card text-white">
+						<q-card-section class="row items-center no-wrap q-pb-sm">
+							<div class="avatar-wrapper q-mr-sm">
+								<q-avatar size="32px" color="primary" text-color="white">
+									{{ typingPreviewUser.charAt(0).toUpperCase() }}
+								</q-avatar>
+								<span
+									class="status-dot"
+									:style="{ backgroundColor: statusOption(typingPreviewUser).color }"
+								/>
+							</div>
+							<div class="col" style="min-width: 0">
+								<div class="text-weight-bold ellipsis">{{ typingPreviewUser }}</div>
+								<div class="text-caption text-grey-5">
+									{{ previewIsTyping ? 'práve píše' : 'nepíše' }} v #{{ channelName }}
+								</div>
+							</div>
+							<q-btn flat round dense icon="close" color="grey-5" v-close-popup />
+						</q-card-section>
+						<q-separator dark />
+						<q-card-section>
+							<!-- prettier-ignore -->
+							<div v-if="previewIsTyping && previewText" class="typing-preview-text">{{ previewText }}<span class="typing-caret" /></div>
+							<div v-else class="text-grey-5 text-italic">
+								{{ typingPreviewUser }} momentálne nič nepíše.
+							</div>
+						</q-card-section>
+					</q-card>
+				</q-dialog>
 
 				<!-- Right: Members Sidebar (Toggleable via people_alt or /list) -->
 				<div
@@ -524,6 +589,8 @@ export default defineComponent({
 			ticker: 0,
 			notificationsEnabled: false,
 			showMembers: false,
+			typingPreviewOpen: false,
+			typingPreviewUser: '',
 		};
 	},
 
@@ -634,16 +701,21 @@ export default defineComponent({
 			return `${users.slice(0, 2).join(', ')} and others are typing...`;
 		},
 
-		typingUserText(): string {
-			const users = this.activeTypingUsers;
-			if (users.length === 0) return '';
-			if (users.length === 1) {
-				return users[0] ?? '';
-			}
-			if (users.length === 2) {
-				return `${users[0]} and ${users[1]}`;
-			}
-			return `${users.slice(0, 2).join(', ')} and others`;
+		// Mená zobrazené priamo v lište (max. 2), zvyšok je schovaný pod "others"
+		typingDisplayUsers(): string[] {
+			return this.activeTypingUsers.slice(0, 2);
+		},
+
+		typingOtherUsers(): string[] {
+			return this.activeTypingUsers.slice(2);
+		},
+
+		previewIsTyping(): boolean {
+			return this.activeTypingUsers.some((u) => isSameUser(u, this.typingPreviewUser));
+		},
+
+		previewText(): string {
+			return this.chatStore.typingTextOf(this.channelName, this.typingPreviewUser);
 		},
 
 		typingSuffix(): string {
@@ -670,6 +742,7 @@ export default defineComponent({
 				this.chatStore.setTyping(oldChan, currentUser, false);
 			}
 			this.stopTyping();
+			this.typingPreviewOpen = false;
 			this.scrollToBottom();
 		},
 		// Po každej novej správe (vlastnej aj cudzej) scrollneme na ňu
@@ -720,15 +793,15 @@ export default defineComponent({
 				return;
 			}
 			if (text.trim().length > 0) {
-				this.handleTyping();
+				this.handleTyping(text);
 			} else {
 				this.stopTyping();
 			}
 		},
 
-		handleTyping() {
+		handleTyping(text: string) {
 			const currentUser = this.authStore.currentUser || 'Používateľ';
-			this.chatStore.setTyping(this.channelName, currentUser, true);
+			this.chatStore.setTyping(this.channelName, currentUser, true, text);
 
 			if (this.typingTimer) {
 				clearTimeout(this.typingTimer);
@@ -745,6 +818,11 @@ export default defineComponent({
 			}
 			const currentUser = this.authStore.currentUser || 'Používateľ';
 			this.chatStore.setTyping(this.channelName, currentUser, false);
+		},
+
+		openTypingPreview(user: string) {
+			this.typingPreviewUser = user;
+			this.typingPreviewOpen = true;
 		},
 
 		goToAccessibleChannel() {
@@ -994,6 +1072,45 @@ export default defineComponent({
 	40% {
 		transform: scale(1);
 		opacity: 1;
+	}
+}
+
+.typing-name {
+	cursor: pointer;
+}
+
+.typing-name:hover {
+	text-decoration: underline;
+}
+
+.typing-preview-card {
+	width: 420px;
+	max-width: 90vw;
+	background-color: #2b2d31;
+}
+
+.typing-preview-text {
+	white-space: pre-wrap;
+	word-break: break-word;
+	line-height: 1.45;
+	max-height: 50vh;
+	overflow-y: auto;
+	color: #dbdee1;
+}
+
+.typing-caret {
+	display: inline-block;
+	width: 2px;
+	height: 1.1em;
+	margin-left: 1px;
+	vertical-align: text-bottom;
+	background-color: #dbdee1;
+	animation: caret-blink 1s steps(1) infinite;
+}
+
+@keyframes caret-blink {
+	50% {
+		opacity: 0;
 	}
 }
 

@@ -9,7 +9,7 @@
         class="q-mr-sm"
       />
       <q-toolbar-title class="text-weight-bold row items-center" style="font-size: 1rem">
-        <span>{{ channelName }}</span>
+        <span>#{{ channelName }}</span>
         <q-badge
           v-if="currentChannel"
           :color="currentChannel.type === 'private' ? 'deep-purple' : 'primary'"
@@ -17,8 +17,27 @@
         >
           {{ currentChannel.type === 'private' ? 'Súkromný' : 'Verejný' }}
         </q-badge>
-        <span v-if="currentChannel" class="text-caption text-grey-5 q-ml-md gt-xs">
-          Správca: <span class="text-grey-3">{{ currentChannel.admin }}</span>
+        <span v-if="currentChannel" class="text-caption text-grey-5 q-ml-md gt-xs row items-center">
+          Správca kanála: <span class="text-grey-3 q-mx-xs">{{ currentChannel.admin }}</span>
+          <q-badge
+            v-if="isChannelAdmin"
+            color="positive"
+            text-color="white"
+            class="q-ml-xs text-caption"
+          >
+            Vy
+          </q-badge>
+        </span>
+        <span v-if="currentServer" class="text-caption text-grey-5 q-ml-md gt-xs row items-center">
+          Vlastník servera: <span class="text-grey-3 q-mx-xs">{{ currentServer.admin }}</span>
+          <q-badge
+            v-if="isServerOwner"
+            color="amber-9"
+            text-color="black"
+            class="q-ml-xs text-weight-bold text-caption"
+          >
+            👑 Vy
+          </q-badge>
         </span>
       </q-toolbar-title>
 
@@ -333,9 +352,25 @@
                       class="q-ml-xs"
                       title="Správca kanála"
                     />
+                    <q-badge
+                      v-if="isServerOwnerName(channelAdmin)"
+                      color="amber-9"
+                      text-color="black"
+                      class="q-ml-xs text-weight-bolder"
+                      style="font-size: 9px; padding: 1px 4px"
+                      title="Vlastník servera"
+                    >
+                      👑 Vlastník
+                    </q-badge>
                   </div>
                   <div class="text-caption text-grey-5" style="font-size: 11px">
-                    {{ channelAdmin === currentUsername ? 'Vy • Správca' : 'Správca' }}
+                    {{
+                      isSameUser(channelAdmin, currentUsername)
+                        ? 'Vy • Správca'
+                        : isServerOwnerName(channelAdmin)
+                          ? 'Vlastník servera & Správca'
+                          : 'Správca'
+                    }}
                   </div>
                 </q-item-section>
               </q-item>
@@ -366,7 +401,17 @@
                   <div class="row items-center no-wrap">
                     <span class="text-white ellipsis">{{ member }}</span>
                     <q-badge
-                      v-if="member === currentUsername"
+                      v-if="isServerOwnerName(member)"
+                      color="amber-9"
+                      text-color="black"
+                      class="q-ml-xs text-weight-bolder"
+                      style="font-size: 9px; padding: 1px 4px"
+                      title="Vlastník servera"
+                    >
+                      👑 Vlastník
+                    </q-badge>
+                    <q-badge
+                      v-if="isSameUser(member, currentUsername)"
                       color="grey-8"
                       text-color="grey-4"
                       class="q-ml-xs text-weight-bold"
@@ -375,7 +420,9 @@
                       Vy
                     </q-badge>
                   </div>
-                  <div class="text-caption text-grey-5" style="font-size: 11px">Člen</div>
+                  <div class="text-caption text-grey-5" style="font-size: 11px">
+                    {{ isServerOwnerName(member) ? 'Vlastník servera' : 'Člen' }}
+                  </div>
                 </q-item-section>
               </q-item>
 
@@ -426,7 +473,7 @@
 <script lang="ts">
 import { defineComponent } from 'vue';
 import { mapStores } from 'pinia';
-import { useChatStore, useAuthStore } from '@/stores/store';
+import { isSameUser, useChatStore, useAuthStore } from '@/stores/store';
 import {
   isUserMentioned,
   renderMessageHtml,
@@ -469,12 +516,29 @@ export default defineComponent({
       return this.authStore.currentUser || 'Používateľ';
     },
 
+    currentServer() {
+      // Explicit dependency on selectedServerId for reactivity
+      void this.chatStore.selectedServerId;
+      return this.chatStore.currentServer;
+    },
+
     channelInfo() {
+      // Explicit dependency on selectedServerId & servers
+      void this.chatStore.selectedServerId;
+      void this.chatStore.servers;
       return this.chatStore.findChannelByName(this.channelName);
     },
 
     currentChannel() {
       return this.channelInfo ? this.channelInfo.channel : null;
+    },
+
+    isServerOwner(): boolean {
+      return isSameUser(this.currentUsername, this.currentServer?.admin);
+    },
+
+    isChannelAdmin(): boolean {
+      return isSameUser(this.currentUsername, this.channelAdmin);
     },
 
     channelMembers(): string[] {
@@ -487,7 +551,7 @@ export default defineComponent({
 
     regularMembers(): string[] {
       const admin = this.channelAdmin;
-      return this.channelMembers.filter((m) => m !== admin);
+      return this.channelMembers.filter((m) => !isSameUser(m, admin));
     },
 
     invitedMembers(): string[] {
@@ -705,7 +769,12 @@ export default defineComponent({
         if (text.toLowerCase().trim() === '/list') {
           this.showMembers = true;
         }
-        if (res.redirectUrl) {
+        if (res.newServerId) {
+          this.chatStore.selectServer(res.newServerId);
+          void this.$router.push(
+            '/' + (res.redirectUrl ? res.redirectUrl.replace(/^\//, '') : 'všeobecný'),
+          );
+        } else if (res.redirectUrl) {
           void this.$router.push(res.redirectUrl);
         }
         return;
@@ -747,6 +816,14 @@ export default defineComponent({
     async toggleDesktopNotifications() {
       const granted = await requestNotificationPermission();
       this.notificationsEnabled = granted;
+    },
+
+    isSameUser(u1: string, u2: string): boolean {
+      return isSameUser(u1, u2);
+    },
+
+    isServerOwnerName(name: string): boolean {
+      return isSameUser(name, this.currentServer?.admin);
     },
   },
 });

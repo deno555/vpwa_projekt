@@ -14,13 +14,26 @@ const ACCOUNTS = [
   { username: 'jakub', password: 'admin' },
 ];
 
+const savedAccounts =
+  typeof window !== 'undefined' ? localStorage.getItem('registeredAccounts') : null;
+
+export function isSameUser(u1, u2) {
+  if (!u1 || !u2) return false;
+  return String(u1).trim().toLowerCase() === String(u2).trim().toLowerCase();
+}
+
+export function userListIncludes(list, user) {
+  if (!Array.isArray(list) || !user) return false;
+  const target = String(user).trim().toLowerCase();
+  return list.some((item) => String(item).trim().toLowerCase() === target);
+}
+
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     /** @type {string | null} */
-    currentUser: localStorage.getItem('currentUser'),
-    // Registrované účty sú len v pamäti – po refreshi sa stratia
+    currentUser: typeof window !== 'undefined' ? localStorage.getItem('currentUser') : null,
     /** @type {Account[]} */
-    accounts: [...ACCOUNTS],
+    accounts: savedAccounts ? JSON.parse(savedAccounts) : [...ACCOUNTS],
   }),
   getters: {
     isAuthenticated: (state) => !!state.currentUser,
@@ -44,7 +57,9 @@ export const useAuthStore = defineStore('auth', {
       if (!account) return false;
 
       this.currentUser = account.username;
-      localStorage.setItem('currentUser', account.username);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('currentUser', account.username);
+      }
       return true;
     },
     /**
@@ -54,22 +69,31 @@ export const useAuthStore = defineStore('auth', {
     async register(account) {
       await new Promise((resolve) => setTimeout(resolve, 500)); // simulate network delay
 
-      if (this.accounts.some((a) => a.username === account.username)) {
+      const userLower = (account.username || '').trim().toLowerCase();
+      if (this.accounts.some((a) => a.username.toLowerCase() === userLower)) {
         return 'Používateľ s touto prezývkou už existuje';
       }
-      if (account.email && this.accounts.some((a) => a.email === account.email)) {
-        return 'Používateľ s týmto emailom už existuje';
+      if (account.email) {
+        const emailLower = account.email.trim().toLowerCase();
+        if (this.accounts.some((a) => a.email && a.email.toLowerCase() === emailLower)) {
+          return 'Používateľ s týmto emailom už existuje';
+        }
       }
 
       this.accounts.push(account);
-
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('registeredAccounts', JSON.stringify(this.accounts));
+        localStorage.setItem('currentUser', account.username);
+      }
       this.currentUser = account.username;
-      localStorage.setItem('currentUser', account.username);
+
       return null;
     },
     logout() {
       this.currentUser = null;
-      localStorage.removeItem('currentUser');
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('currentUser');
+      }
     },
   },
 });
@@ -371,9 +395,7 @@ export const useChatStore = defineStore('chat', {
       const currentUser = auth.currentUser;
       if (!currentUser) return [];
       return state.servers.filter((s) => {
-        return (
-          s.admin === currentUser || (Array.isArray(s.members) && s.members.includes(currentUser))
-        );
+        return isSameUser(s.admin, currentUser) || userListIncludes(s.members, currentUser);
       });
     },
     currentServer: (state) => {
@@ -381,12 +403,16 @@ export const useChatStore = defineStore('chat', {
       const currentUser = auth.currentUser;
       const accessible = state.servers.filter((s) => {
         if (!currentUser) return true;
-        return (
-          s.admin === currentUser || (Array.isArray(s.members) && s.members.includes(currentUser))
-        );
+        return isSameUser(s.admin, currentUser) || userListIncludes(s.members, currentUser);
       });
       const found = accessible.find((s) => s.id === state.selectedServerId);
-      return found || accessible[0] || state.servers[0] || INITIAL_SERVERS[0];
+      return (
+        found ||
+        accessible[0] ||
+        state.servers.find((s) => s.id === state.selectedServerId) ||
+        state.servers[0] ||
+        INITIAL_SERVERS[0]
+      );
     },
     currentChannels: (state) => {
       const server = state.servers.find((s) => s.id === state.selectedServerId) || state.servers[0];
@@ -404,23 +430,20 @@ export const useChatStore = defineStore('chat', {
     },
     isServerMember: () => (server, username) => {
       if (!server || !username) return false;
-      return (
-        server.admin === username ||
-        (Array.isArray(server.members) && server.members.includes(username))
-      );
+      return isSameUser(server.admin, username) || userListIncludes(server.members, username);
     },
     hasChannelAccess: () => (channel, username) => {
       if (!channel || !username) return false;
-      if (Array.isArray(channel.banned) && channel.banned.includes(username)) {
+      if (userListIncludes(channel.banned, username)) {
         return false;
       }
       if (channel.type === 'public') {
         return true;
       }
       return (
-        channel.admin === username ||
-        (Array.isArray(channel.members) && channel.members.includes(username)) ||
-        (Array.isArray(channel.invited) && channel.invited.includes(username))
+        isSameUser(channel.admin, username) ||
+        userListIncludes(channel.members, username) ||
+        userListIncludes(channel.invited, username)
       );
     },
     findChannelByName: (state) => (/** @type {string} */ channelName) => {
@@ -429,18 +452,23 @@ export const useChatStore = defineStore('chat', {
         .replace(/^#/, '');
       const auth = useAuthStore();
       const currentUser = auth.currentUser;
-      const accessible = state.servers.filter((s) => {
-        if (!currentUser) return true;
-        return (
-          s.admin === currentUser || (Array.isArray(s.members) && s.members.includes(currentUser))
-        );
-      });
-      const curServer = accessible.find((s) => s.id === state.selectedServerId) || accessible[0];
+      // 1. Skontrolujeme aktuálne vybraný server
+      const curServer = state.servers.find((s) => s.id === state.selectedServerId);
       if (curServer) {
         const foundInCur = curServer.channels.find((c) => c.name.toLowerCase() === name);
         if (foundInCur) return { channel: foundInCur, server: curServer };
       }
+      // 2. Skontrolujeme dostupné servery používateľa
+      const accessible = state.servers.filter((s) => {
+        if (!currentUser) return true;
+        return isSameUser(s.admin, currentUser) || userListIncludes(s.members, currentUser);
+      });
       for (const server of accessible) {
+        const found = server.channels.find((c) => c.name.toLowerCase() === name);
+        if (found) return { channel: found, server };
+      }
+      // 3. Fallback na všetky servery
+      for (const server of state.servers) {
         const found = server.channels.find((c) => c.name.toLowerCase() === name);
         if (found) return { channel: found, server };
       }
@@ -450,10 +478,18 @@ export const useChatStore = defineStore('chat', {
       const name = String(channelName || '')
         .toLowerCase()
         .replace(/^#/, '');
+      // Najprv skontrolujeme aktuálne vybraný server!
+      const curServer = state.servers.find((s) => s.id === state.selectedServerId);
+      if (curServer) {
+        const found = curServer.channels.find((c) => c.name.toLowerCase() === name);
+        if (found) {
+          return userListIncludes(found.members, username);
+        }
+      }
       for (const server of state.servers) {
         const found = server.channels.find((c) => c.name.toLowerCase() === name);
         if (found) {
-          return Array.isArray(found.members) && found.members.includes(username);
+          return userListIncludes(found.members, username);
         }
       }
       return false;
@@ -462,10 +498,17 @@ export const useChatStore = defineStore('chat', {
       const name = String(channelName || '')
         .toLowerCase()
         .replace(/^#/, '');
+      const curServer = state.servers.find((s) => s.id === state.selectedServerId);
+      if (curServer) {
+        const found = curServer.channels.find((c) => c.name.toLowerCase() === name);
+        if (found) {
+          return userListIncludes(found.banned, username);
+        }
+      }
       for (const server of state.servers) {
         const found = server.channels.find((c) => c.name.toLowerCase() === name);
         if (found) {
-          return Array.isArray(found.banned) && found.banned.includes(username);
+          return userListIncludes(found.banned, username);
         }
       }
       return false;
@@ -675,7 +718,7 @@ export const useChatStore = defineStore('chat', {
      * Spracovanie príkazov z príkazového riadka
      * @param {string} currentChannelName
      * @param {string} commandLine
-     * @returns {{ success: boolean, message: string, redirectUrl?: string }}
+     * @returns {{ success: boolean, message: string, redirectUrl?: string, newServerId?: number }}
      */
     executeCommand(currentChannelName, commandLine) {
       const auth = useAuthStore();
@@ -820,14 +863,15 @@ export const useChatStore = defineStore('chat', {
 
           return {
             success: true,
-            message: `Server "${serverName}" bol vytvorený.`,
+            message: `Server "${serverName}" bol úspešne vytvorený a stal si sa jeho vlastníkom.`,
             redirectUrl: '/všeobecný',
+            newServerId: newServer.id,
           };
         }
 
         // --- 3. /delete (zrušenie servera správcom) ---
         case 'delete': {
-          if (server.admin !== currentUser) {
+          if (!isSameUser(server.admin, currentUser)) {
             return {
               success: false,
               message: `Iba správca servera ("${server.admin}") môže zmazať tento server.`,

@@ -55,7 +55,21 @@
           <div class="channel-sidebar col" style="height: 100%">
             <!-- Sidebar Header -->
             <div class="channel-header flex items-center justify-between q-px-md cursor-pointer">
-              <div class="text-weight-bold ellipsis">{{ selectedServer?.name }}</div>
+              <div class="row items-center no-wrap ellipsis col q-mr-xs">
+                <div class="text-weight-bold ellipsis">
+                  {{ selectedServer?.name || 'Žiadny server' }}
+                </div>
+                <q-badge
+                  v-if="isServerAdmin"
+                  color="amber-9"
+                  text-color="black"
+                  class="q-ml-sm text-weight-bolder text-caption"
+                  title="Si vlastník tohto servera"
+                  style="font-size: 10px; padding: 2px 6px"
+                >
+                  👑 VLASTNÍK
+                </q-badge>
+              </div>
               <q-icon name="expand_more" size="sm" />
 
               <q-menu
@@ -64,7 +78,26 @@
                 :offset="[0, 4]"
                 class="discord-bg text-white"
               >
-                <q-list dense style="min-width: 180px">
+                <q-list dense style="min-width: 190px">
+                  <q-item
+                    v-if="selectedServer"
+                    dense
+                    class="text-caption text-grey-4 q-py-xs bg-grey-10"
+                  >
+                    <q-item-section>
+                      <div>
+                        Vlastník: <strong class="text-white">{{ selectedServer.admin }}</strong>
+                      </div>
+                      <div
+                        v-if="isServerAdmin"
+                        class="text-amber-4 text-weight-bold"
+                        style="font-size: 10px"
+                      >
+                        (Tvoj server)
+                      </div>
+                    </q-item-section>
+                  </q-item>
+                  <q-separator dark class="q-my-xs" />
                   <q-item
                     clickable
                     v-close-popup
@@ -82,7 +115,9 @@
                     @click="leaveServer"
                     class="text-red-4 hover-bg-grey-9"
                   >
-                    <q-item-section>Odísť zo servera</q-item-section>
+                    <q-item-section>
+                      {{ isServerAdmin ? 'Zrušiť server (správca)' : 'Odísť zo servera' }}
+                    </q-item-section>
                     <q-item-section side>
                       <q-icon name="logout" size="xs" color="red-4" />
                     </q-item-section>
@@ -256,13 +291,13 @@
           >
             <div class="user-avatar-wrapper">
               <q-avatar size="32px" color="primary" text-color="white">
-                {{ currentUser.username.charAt(0).toUpperCase() }}
+                {{ currentUsername.charAt(0).toUpperCase() }}
               </q-avatar>
               <span class="status-dot" :style="{ backgroundColor: currentStatus.color }" />
             </div>
             <div class="col q-ml-sm" style="min-width: 0">
               <div class="text-weight-bold ellipsis" style="font-size: 14px; line-height: 1.2">
-                {{ currentUser.username }}
+                {{ currentUsername }}
               </div>
               <div class="text-grey-5 ellipsis" style="font-size: 12px; line-height: 1.2">
                 {{ currentStatus.label }}
@@ -322,7 +357,7 @@
     </q-drawer>
 
     <q-page-container>
-      <router-view />
+      <router-view :key="$route.fullPath + '-' + selectedServerId" />
     </q-page-container>
   </q-layout>
 </template>
@@ -457,9 +492,14 @@ export default defineComponent({
         }));
     },
 
+    currentUsername(): string {
+      return this.authStore.currentUser || 'Neznámy';
+    },
+
     isServerAdmin(): boolean {
-      const currentNick = this.authStore.currentUser || '';
-      return this.selectedServer?.admin === currentNick;
+      const currentNick = (this.authStore.currentUser || '').trim().toLowerCase();
+      const serverAdmin = (this.selectedServer?.admin || '').trim().toLowerCase();
+      return !!currentNick && currentNick === serverAdmin;
     },
   },
 
@@ -530,8 +570,10 @@ export default defineComponent({
         'všeobecný',
         `/create ${name} ${isPrivate ? 'private' : ''}`,
       );
-      if (res.redirectUrl) {
-        await this.$router.push(res.redirectUrl);
+      if (res.newServerId) {
+        await this.selectServer(res.newServerId);
+      } else if (res.redirectUrl) {
+        await this.selectServer(this.chatStore.selectedServerId);
       }
     },
 

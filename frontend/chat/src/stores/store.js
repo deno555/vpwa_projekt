@@ -34,11 +34,17 @@ export const useAuthStore = defineStore('auth', {
     async login(username, password) {
       await new Promise((resolve) => setTimeout(resolve, 500)); // simulate network delay
 
-      const valid = this.accounts.some((a) => a.username === username && a.password === password);
-      if (!valid) return false;
+      const userLower = (username || '').trim().toLowerCase();
+      const account = this.accounts.find(
+        (a) =>
+          (a.username.toLowerCase() === userLower ||
+            (a.email && a.email.toLowerCase() === userLower)) &&
+          a.password === password,
+      );
+      if (!account) return false;
 
-      this.currentUser = username;
-      localStorage.setItem('currentUser', username);
+      this.currentUser = account.username;
+      localStorage.setItem('currentUser', account.username);
       return true;
     },
     /**

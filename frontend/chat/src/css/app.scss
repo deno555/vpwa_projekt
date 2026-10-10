@@ -1,1 +1,124 @@
 // app global css
+body {
+  background-color: #313338;
+  color: #dbdee1;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+// Sleek dark scrollbar
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #2b2d31;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e1f22;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #18191c;
+}
+
+// Auth styling
+.discord-auth-bg {
+  min-height: 100vh;
+  background-color: #313338;
+  background-image: radial-gradient(
+    circle at 50% 15%,
+    rgba(88, 101, 242, 0.12) 0%,
+    rgba(30, 31, 34, 0.5) 100%
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+
+.discord-card {
+  background-color: #2b2d31 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.discord-field-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #b5bac1;
+  margin-bottom: 6px;
+}
+
+.discord-field-required {
+  color: #f23f43;
+  margin-left: 3px;
+}
+
+.discord-input {
+  .q-field__control {
+    background-color: #1e1f22 !important;
+    border-radius: 8px !important;
+    min-height: 44px;
+    height: 44px;
+    transition: border-color 0.15s ease;
+  }
+  .q-field__control:before {
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  }
+  .q-field__control:hover:before {
+    border-color: rgba(255, 255, 255, 0.18) !important;
+  }
+  &.q-field--focused .q-field__control:after {
+    border-color: #5865f2 !important;
+    border-width: 2px !important;
+  }
+  .q-field__native,
+  input {
+    color: #f2f3f5 !important;
+    font-size: 14px;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+  .q-field__messages {
+    color: #f23f43;
+    font-size: 12px;
+  }
+}
+
+.discord-btn-primary {
+  background-color: #5865f2 !important;
+  color: #ffffff !important;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: 8px !important;
+  height: 44px;
+  font-size: 15px;
+  transition:
+    background-color 0.15s ease,
+    transform 0.1s ease;
+
+  &:hover {
+    background-color: #4752c4 !important;
+  }
+  &:active {
+    transform: scale(0.99);
+  }
+}
+
+.discord-link {
+  color: #00a8fc;
+  text-decoration: none;
+  font-weight: 500;
+  transition:
+    color 0.15s ease,
+    text-decoration 0.15s ease;
+
+  &:hover {
+    text-decoration: underline;
+    color: #5865f2;
+  }
+}

@@ -1,73 +1,111 @@
 <template>
-  <q-layout view="hHh lpR fFf">
+  <q-layout view="hHh lpR fFf" class="discord-bg">
     <q-page-container>
-      <q-page class="flex flex-center bg-grey-2">
-        <q-card class="login-card q-pa-md" flat bordered>
-          <q-card-section class="text-center">
-            <div class="text-h5">Chat v1</div>
-            <div class="text-subtitle2 text-grey-7">Sign in to your account</div>
-          </q-card-section>
+      <q-page class="discord-auth-bg">
+        <div class="discord-card q-pa-lg login-card">
+          <!-- Logo & Header -->
+          <div class="column items-center q-mb-lg text-center">
+            <div class="auth-icon-wrapper q-mb-sm">
+              <q-icon name="chat" size="30px" color="primary" />
+            </div>
+            <div class="text-h5 text-weight-bold text-white q-mt-xs">Vitaj späť!</div>
+            <div class="text-caption text-grey-5 q-mt-xs">Máme radosť, že ťa znova vidíme!</div>
+          </div>
 
           <q-form @submit="onSubmit">
-            <q-card-section class="q-gutter-md">
+            <!-- Username / Email Field -->
+            <div class="q-mb-md">
+              <label class="discord-field-label block">
+                Používateľské meno alebo email
+                <span class="discord-field-required">*</span>
+              </label>
               <q-input
                 v-model="username"
                 type="text"
-                label="Username"
                 outlined
+                dense
                 autofocus
                 autocomplete="username"
-                :rules="[(v) => !!v || 'Username is required']"
+                class="discord-input"
+                placeholder="Zadaj meno alebo email"
+                :rules="[(v) => !!v || 'Používateľské meno alebo email je povinné']"
                 lazy-rules
               >
                 <template #prepend>
-                  <q-icon name="person" />
+                  <q-icon name="person" size="20px" color="grey-5" />
                 </template>
               </q-input>
+            </div>
 
+            <!-- Password Field -->
+            <div class="q-mb-md">
+              <div class="row justify-between items-center q-mb-none">
+                <label class="discord-field-label block">
+                  Heslo
+                  <span class="discord-field-required">*</span>
+                </label>
+              </div>
               <q-input
                 v-model="password"
                 :type="showPassword ? 'text' : 'password'"
-                label="Password"
                 outlined
+                dense
                 autocomplete="current-password"
-                :rules="[(v) => !!v || 'Password is required']"
+                class="discord-input"
+                placeholder="Zadaj heslo"
+                :rules="[(v) => !!v || 'Heslo je povinné']"
                 lazy-rules
               >
                 <template #prepend>
-                  <q-icon name="lock" />
+                  <q-icon name="lock" size="20px" color="grey-5" />
                 </template>
                 <template #append>
-                  <q-icon
-                    :name="showPassword ? 'visibility_off' : 'visibility'"
-                    class="cursor-pointer"
+                  <q-btn
+                    flat
+                    round
+                    dense
+                    size="sm"
+                    :icon="showPassword ? 'visibility_off' : 'visibility'"
+                    color="grey-5"
                     @click="showPassword = !showPassword"
+                    :title="showPassword ? 'Skryť heslo' : 'Zobraziť heslo'"
                   />
                 </template>
               </q-input>
+            </div>
 
-              <q-banner v-if="error" class="bg-red-1 text-negative" rounded dense>
-                {{ error }}
-              </q-banner>
-            </q-card-section>
-
-            <q-card-actions class="column q-px-md">
-              <q-btn
-                type="submit"
-                color="primary"
-                label="Log in"
-                class="full-width"
-                :loading="loading"
-                no-caps
-                unelevated
-              />
-              <div class="q-mt-md text-grey-7">
-                Don't have an account?
-                <router-link to="/register">Register</router-link>
+            <!-- Error Banner -->
+            <transition name="fade">
+              <div v-if="error" class="discord-error-banner q-mb-md row items-center no-wrap">
+                <q-icon
+                  name="error_outline"
+                  size="20px"
+                  color="negative"
+                  class="q-mr-sm col-auto"
+                />
+                <div class="text-caption text-weight-medium col">{{ error }}</div>
               </div>
-            </q-card-actions>
+            </transition>
+
+            <!-- Submit Button -->
+            <q-btn
+              type="submit"
+              label="Prihlásiť sa"
+              class="full-width discord-btn-primary q-mt-sm"
+              :loading="loading"
+              no-caps
+              unelevated
+            />
+
+            <!-- Switch to Register -->
+            <div class="text-caption text-grey-5 q-mt-md">
+              Potrebuješ účet?
+              <router-link to="/register" class="discord-link q-ml-xs">
+                Zaregistruj sa
+              </router-link>
+            </div>
           </q-form>
-        </q-card>
+        </div>
       </q-page>
     </q-page-container>
   </q-layout>
@@ -107,7 +145,7 @@ export default defineComponent({
       if (ok) {
         await this.$router.push('/');
       } else {
-        this.error = 'Nesprávne meno alebo heslo';
+        this.error = 'Nesprávne používateľské meno alebo heslo.';
       }
     },
   },
@@ -117,6 +155,34 @@ export default defineComponent({
 <style scoped>
 .login-card {
   width: 100%;
-  max-width: 400px;
+  max-width: 440px;
+}
+
+.auth-icon-wrapper {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: rgba(88, 101, 242, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.discord-error-banner {
+  background-color: rgba(242, 63, 67, 0.12);
+  border: 1px solid rgba(242, 63, 67, 0.35);
+  color: #fa777c;
+  padding: 10px 14px;
+  border-radius: 8px;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

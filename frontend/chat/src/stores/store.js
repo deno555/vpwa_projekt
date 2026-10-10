@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { isUserMentioned, triggerPing } from '../utils/notifications.js'
 
 // --- Prihlasovanie ---
 
@@ -448,6 +449,11 @@ export const useChatStore = defineStore('chat', {
         } catch {
           // ignore
         }
+      }
+
+      // Ak správa obsahuje @zmienku pre odosielateľa (napr. testovanie pingu samého seba)
+      if (currentUser && isUserMentioned(msg.text, currentUser)) {
+        triggerPing(channel, msg)
       }
     },
 
@@ -1035,6 +1041,10 @@ if (bc) {
       chatStore.applyTyping(data.channel, data.username, data.isTyping, data.time)
     } else if (data.type === 'new_message') {
       chatStore.applyNewMessage(data.channel, data.message)
+      const auth = useAuthStore()
+      if (auth.currentUser && isUserMentioned(data.message.text, auth.currentUser)) {
+        triggerPing(data.channel, data.message)
+      }
     } else if (data.type === 'servers_updated') {
       chatStore.servers = data.servers
       chatStore.selectedServerId = data.selectedServerId

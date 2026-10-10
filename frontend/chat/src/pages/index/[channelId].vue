@@ -16,7 +16,16 @@
       <q-space />
       
       <q-btn flat round dense icon="terminal" color="amber-5" class="q-mr-sm" title="Príkazy terminálu (/help)" @click="showHelp" />
-      <q-btn flat round dense icon="notifications" color="grey-5" class="q-mr-sm" />
+      <q-btn
+        flat
+        round
+        dense
+        :icon="notificationsEnabled ? 'notifications_active' : 'notifications'"
+        :color="notificationsEnabled ? 'amber-5' : 'grey-5'"
+        class="q-mr-sm"
+        :title="notificationsEnabled ? 'Desktop notifikácie sú aktívne' : 'Povoliť desktopové notifikácie a pingy'"
+        @click="toggleDesktopNotifications"
+      />
       <q-btn flat round dense icon="push_pin" color="grey-5" class="q-mr-sm" />
       <q-btn flat round dense icon="people_alt" color="grey-5" />
     </q-toolbar>
@@ -64,20 +73,51 @@
           </div>
 
           <!-- Messages -->
-          <div v-for="msg in currentMessages" :key="msg.id" class="q-mb-md flex q-py-xs msg-hover" :class="{ 'system-msg-box': msg.isSystem }">
-            <q-avatar size="40px" :color="msg.isSystem ? 'amber-9' : 'primary'" text-color="white" class="q-mr-md" :icon="msg.isSystem ? 'terminal' : undefined">
+          <div
+            v-for="msg in currentMessages"
+            :key="msg.id"
+            class="q-mb-sm flex q-py-xs msg-row"
+            :class="{
+              'system-msg-box': msg.isSystem,
+              'msg-mentioned': isMessageMentioned(msg)
+            }"
+          >
+            <q-avatar
+              size="40px"
+              :color="msg.isSystem ? 'amber-9' : isMessageMentioned(msg) ? 'amber-8' : 'primary'"
+              text-color="white"
+              class="q-mr-md msg-avatar"
+              :icon="msg.isSystem ? 'terminal' : undefined"
+            >
               <template v-if="!msg.isSystem">
                 {{ msg.author.charAt(0).toUpperCase() }}
               </template>
             </q-avatar>
             <div class="col" style="min-width: 0;">
-              <div class="flex items-baseline q-mb-xs">
-                <span class="text-weight-bold q-mr-sm" :class="msg.isSystem ? 'text-amber-4' : 'text-white'">{{ msg.author }}</span>
+              <div class="flex items-center q-mb-xs">
+                <span
+                  class="text-weight-bold q-mr-sm author-name"
+                  :class="msg.isSystem ? 'text-amber-4' : isMessageMentioned(msg) ? 'text-amber-3' : 'text-white'"
+                  @click="insertMention(msg.author)"
+                  :title="msg.isSystem ? undefined : `Klikni pre označenie @${msg.author}`"
+                >
+                  {{ msg.author }}
+                </span>
                 <span class="text-grey-5 text-caption">Dnes o {{ msg.time }}</span>
+                <q-badge
+                  v-if="isMessageMentioned(msg)"
+                  color="amber-8"
+                  text-color="black"
+                  class="q-ml-sm text-weight-bold mention-badge"
+                >
+                  @ping
+                </q-badge>
               </div>
-              <div :class="msg.isSystem ? 'text-amber-2' : 'text-grey-3'" style="word-break: break-word; white-space: pre-line;">
-                {{ msg.text }}
-              </div>
+              <div
+                :class="msg.isSystem ? 'text-amber-2' : 'text-grey-3'"
+                class="msg-content"
+                v-html="formatMessage(msg.text)"
+              />
             </div>
           </div>
         </div>
@@ -85,6 +125,24 @@
 
       <!-- Message Input Area (Príkazový riadok) -->
       <div class="bg-discord-main q-px-md q-pt-xs q-pb-sm">
+        <!-- Quick mention helper chips if user is typing '@' -->
+        <div v-if="mentionSuggestions.length > 0" class="row items-center q-gutter-xs q-mb-xs q-px-xs">
+          <span class="text-caption text-grey-5 q-mr-xs">Označiť:</span>
+          <q-chip
+            v-for="user in mentionSuggestions"
+            :key="user"
+            clickable
+            dense
+            size="sm"
+            color="primary"
+            text-color="white"
+            icon="alternate_email"
+            @click="applyMentionSuggestion(user)"
+          >
+            {{ user }}
+          </q-chip>
+        </div>
+
         <q-input
           v-model="newMessage"
           dense
@@ -129,6 +187,7 @@
 import { defineComponent } from 'vue';
 import { mapStores } from 'pinia';
 import { useChatStore, useAuthStore } from '@/stores/store';
+import { isUserMentioned, renderMessageHtml, requestNotificationPermission } from '@/utils/notifications';
 import type { QScrollArea } from 'quasar';
 
 interface ChannelItem {
@@ -149,6 +208,7 @@ export default defineComponent({
       typingTimer: null as ReturnType<typeof setTimeout> | null,
       cleanupInterval: null as ReturnType<typeof setInterval> | null,
       ticker: 0,
+      notificationsEnabled: false,
     };
   },
 
@@ -236,6 +296,14 @@ export default defineComponent({
       }
       return 'are typing...';
     },
+
+    mentionSuggestions(): string[] {
+      const match = this.newMessage.match(/@([a-zA-Z0-9_áäčďéíĺľňóôŕšťúýžÁÄČĎÉÍĹĽŇÓÔŔŠŤÚÝŽ-]*)$/);
+      if (!match) return [];
+      const query = (match[1] || '').toLowerCase();
+      const members = this.currentChannel?.members || ['denis', 'jakub'];
+      return members.filter((m) => m.toLowerCase().includes(query));
+    },
   },
 
   watch: {
@@ -259,6 +327,10 @@ export default defineComponent({
       this.ticker++;
     }, 1000);
     this.scrollToBottom();
+
+    if (typeof Notification !== 'undefined') {
+      this.notificationsEnabled = Notification.permission === 'granted';
+    }
   },
 
   beforeUnmount() {
@@ -357,6 +429,35 @@ export default defineComponent({
       this.chatStore.sendMessage(this.channelName, text);
       this.newMessage = '';
     },
+
+    isMessageMentioned(msg: { text: string; isSystem?: boolean }): boolean {
+      if (msg.isSystem) return false;
+      const currentNick = this.authStore.currentUser;
+      if (!currentNick) return false;
+      return isUserMentioned(msg.text, currentNick);
+    },
+
+    formatMessage(text: string): string {
+      return renderMessageHtml(text, this.authStore.currentUser);
+    },
+
+    insertMention(author: string) {
+      if (!author || author === 'Systém') return;
+      const current = this.newMessage ? this.newMessage.trim() + ' ' : '';
+      this.newMessage = `${current}@${author} `;
+    },
+
+    applyMentionSuggestion(user: string) {
+      this.newMessage = this.newMessage.replace(
+        /@([a-zA-Z0-9_áäčďéíĺľňóôŕšťúýžÁÄČĎÉÍĹĽŇÓÔŔŠŤÚÝŽ-]*)$/,
+        `@${user} `,
+      );
+    },
+
+    async toggleDesktopNotifications() {
+      const granted = await requestNotificationPermission();
+      this.notificationsEnabled = granted;
+    },
   },
 });
 </script>
@@ -366,13 +467,79 @@ export default defineComponent({
   background-color: #313338;
 }
 
-.msg-hover {
+.msg-row {
   border-radius: 4px;
-  transition: background-color 0.1s;
+  padding: 4px 8px;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+  position: relative;
 }
 
-.msg-hover:hover {
+.msg-row:hover {
   background-color: #2b2d31;
+}
+
+/* Discord-like yellow/gold mention highlight */
+.msg-mentioned {
+  background-color: rgba(250, 166, 26, 0.1) !important;
+  border-left: 3px solid #f0b232;
+  border-radius: 0 4px 4px 0;
+}
+
+.msg-mentioned:hover {
+  background-color: rgba(250, 166, 26, 0.16) !important;
+}
+
+.author-name {
+  cursor: pointer;
+  transition: text-decoration 0.1s ease;
+}
+
+.author-name:hover {
+  text-decoration: underline;
+}
+
+.mention-badge {
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.msg-content {
+  word-break: break-word;
+  white-space: pre-line;
+  line-height: 1.45;
+}
+
+/* Styling for @mentions pills inside messages */
+:deep(.mention-pill) {
+  display: inline-block;
+  padding: 1px 6px;
+  margin: 0 2px;
+  border-radius: 4px;
+  background-color: rgba(88, 101, 242, 0.25);
+  color: #c9cdfb;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: text;
+}
+
+:deep(.mention-pill:hover) {
+  background-color: #5865f2;
+  color: #ffffff;
+}
+
+/* Gold pill when it's @me */
+:deep(.mention-pill--me) {
+  background-color: rgba(250, 166, 26, 0.28);
+  color: #ffe082;
+  font-weight: 700;
+}
+
+:deep(.mention-pill--me:hover) {
+  background-color: #f0b232;
+  color: #1e1f22;
 }
 
 /* Quasar input overrides for discord style */

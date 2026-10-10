@@ -14,15 +14,13 @@ import type {
   ParamValueZeroOrMore,
   ParamValueZeroOrOne,
 } from 'vue-router'
-import type {
-  _ExtractParamParserType,
-} from 'vue-router/experimental'
+import type { _ExtractParamParserType } from 'vue-router/experimental';
 
 declare module 'vue-router' {
   interface TypesConfig {
-    _ParamParsers: {}
-    RouteNamedMap: import('vue-router/auto-routes').RouteNamedMap
-    _RouteFileInfoMap: import('vue-router/auto-routes')._RouteFileInfoMap
+    _ParamParsers: {};
+    RouteNamedMap: import('vue-router/auto-routes').RouteNamedMap;
+    _RouteFileInfoMap: import('vue-router/auto-routes')._RouteFileInfoMap;
   }
 }
 
@@ -36,52 +34,50 @@ declare module 'vue-router/auto-routes' {
       '/',
       Record<never, never>,
       Record<never, never>,
-      | '//(index)'
-      | '//[channelId]'
-      | '//second'
-    >,
+      '//(index)' | '//[channelId]' | '//second'
+    >;
     '//(index)': RouteRecordInfo<
       '//(index)',
       '/',
       Record<never, never>,
       Record<never, never>,
-      | never
-    >,
+      never
+    >;
     '//[channelId]': RouteRecordInfo<
       '//[channelId]',
       '/:channelId',
       { channelId: ParamValue<true> },
       { channelId: ParamValue<false> },
-      | never
-    >,
+      never
+    >;
     '//second': RouteRecordInfo<
       '//second',
       '/second',
       Record<never, never>,
       Record<never, never>,
-      | never
-    >,
+      never
+    >;
     '/[...path]': RouteRecordInfo<
       '/[...path]',
       '/:path(.*)',
       { path: ParamValue<true> },
       { path: ParamValue<false> },
-      | never
-    >,
+      never
+    >;
     '/login/(index)': RouteRecordInfo<
       '/login/(index)',
       '/login',
       Record<never, never>,
       Record<never, never>,
-      | never
-    >,
+      never
+    >;
     '/register/(index)': RouteRecordInfo<
       '/register/(index)',
       '/register',
       Record<never, never>,
       Record<never, never>,
-      | never
-    >,
+      never
+    >;
   }
 
   /**
@@ -96,64 +92,40 @@ declare module 'vue-router/auto-routes' {
    */
   export interface _RouteFileInfoMap {
     'src/pages/index.vue': {
-      routes:
-        | '/'
-        | '//(index)'
-        | '//[channelId]'
-        | '//second'
-      views:
-        | 'default'
-      pathParamNames:
-        | never
-    }
+      routes: '/' | '//(index)' | '//[channelId]' | '//second';
+      views: 'default';
+      pathParamNames: never;
+    };
     'src/pages/index/(index).vue': {
-      routes:
-        | '//(index)'
-      views:
-        | never
-      pathParamNames:
-        | never
-    }
+      routes: '//(index)';
+      views: never;
+      pathParamNames: never;
+    };
     'src/pages/index/[channelId].vue': {
-      routes:
-        | '//[channelId]'
-      views:
-        | never
-      pathParamNames:
-        | 'channelId'
-    }
+      routes: '//[channelId]';
+      views: never;
+      pathParamNames: 'channelId';
+    };
     'src/pages/index/second.vue': {
-      routes:
-        | '//second'
-      views:
-        | never
-      pathParamNames:
-        | never
-    }
+      routes: '//second';
+      views: never;
+      pathParamNames: never;
+    };
     'src/pages/[...path].vue': {
-      routes:
-        | '/[...path]'
-      views:
-        | never
-      pathParamNames:
-        | 'path'
-    }
+      routes: '/[...path]';
+      views: never;
+      pathParamNames: 'path';
+    };
     'src/pages/login/(index).vue': {
-      routes:
-        | '/login/(index)'
-      views:
-        | never
-      pathParamNames:
-        | never
-    }
+      routes: '/login/(index)';
+      views: never;
+      pathParamNames: never;
+    };
     'src/pages/register/(index).vue': {
-      routes:
-        | '/register/(index)'
-      views:
-        | never
-      pathParamNames:
-        | never
-    }
+      routes: '/register/(index)';
+      views: never;
+      pathParamNames: never;
+    };
   }
 
   /**
@@ -163,9 +135,7 @@ declare module 'vue-router/auto-routes' {
    * @internal
    */
   export type _RouteNamesForFilePath<FilePath extends string> =
-    _RouteFileInfoMap extends Record<FilePath, infer Info>
-      ? Info['routes']
-      : keyof RouteNamedMap
+    _RouteFileInfoMap extends Record<FilePath, infer Info> ? Info['routes'] : keyof RouteNamedMap;
 }
 
-export {}
+export {};

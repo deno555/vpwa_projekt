@@ -1,199 +1,324 @@
 <template>
   <q-layout view="lHh Lpr lFf" class="discord-bg text-white">
     <!-- Combined Left Sidebar (Servers + Channels) -->
-    <q-drawer
-      v-model="leftDrawerOpen"
-      show-if-above
-      :width="312"
-      :breakpoint="500"
-    >
-     <div class="column no-wrap fit">
-      <div class="row no-wrap col" style="min-height: 0;">
-      <!-- Servers Column (72px) -->
-      <div class="server-sidebar col-auto" style="width: 72px; height: 100%;">
-        <q-scroll-area class="fit" :horizontal-thumb-style="{ opacity: '0' }">
-          <div class="column items-center q-py-sm q-gutter-y-sm">
-            <!-- Home / Direct Messages -->
-            <div class="server-icon-wrapper">
-              <q-btn round unelevated color="primary" icon="home" size="md" />
-            </div>
+    <q-drawer v-model="leftDrawerOpen" show-if-above :width="312" :breakpoint="500">
+      <div class="column no-wrap fit">
+        <div class="row no-wrap col" style="min-height: 0">
+          <!-- Servers Column (72px) -->
+          <div class="server-sidebar col-auto" style="width: 72px; height: 100%">
+            <q-scroll-area class="fit" :horizontal-thumb-style="{ opacity: '0' }">
+              <div class="column items-center q-py-sm q-gutter-y-sm">
+                <!-- Home / Direct Messages -->
+                <div class="server-icon-wrapper">
+                  <q-btn round unelevated color="primary" icon="home" size="md" />
+                </div>
 
-            <q-separator dark class="q-mx-md" style="width: 32px" />
+                <q-separator dark class="q-mx-md" style="width: 32px" />
 
-            <!-- Mock Servers -->
-            <div
-              class="server-icon-wrapper"
-              :class="{ 'server-active': server.id === selectedServerId }"
-              v-for="server in servers"
-              :key="server.id"
-            >
-              <q-btn
-                round
-                unelevated
-                :color="server.id === selectedServerId ? 'primary' : 'grey-8'"
-                class="server-btn"
-                size="md"
-                :title="server.name"
-                @click="selectServer(server.id)"
-              >
-                {{ server.name.charAt(0).toUpperCase() }}
-              </q-btn>
-            </div>
-            
-            <div class="server-icon-wrapper">
-              <q-btn round unelevated text-color="green" color="grey-9" icon="add" size="md" @click="createServerPrompt" title="Vytvoriť server (/create)" />
-            </div>
+                <!-- Mock Servers -->
+                <div
+                  class="server-icon-wrapper"
+                  :class="{ 'server-active': server.id === selectedServerId }"
+                  v-for="server in servers"
+                  :key="server.id"
+                >
+                  <q-btn
+                    round
+                    unelevated
+                    :color="server.id === selectedServerId ? 'primary' : 'grey-8'"
+                    class="server-btn"
+                    size="md"
+                    :title="server.name"
+                    @click="selectServer(server.id)"
+                  >
+                    {{ server.name.charAt(0).toUpperCase() }}
+                  </q-btn>
+                </div>
+
+                <div class="server-icon-wrapper">
+                  <q-btn
+                    round
+                    unelevated
+                    text-color="green"
+                    color="grey-9"
+                    icon="add"
+                    size="md"
+                    @click="createServerPrompt"
+                    title="Vytvoriť server (/create)"
+                  />
+                </div>
+              </div>
+            </q-scroll-area>
           </div>
-        </q-scroll-area>
-      </div>
 
-      <!-- Channels Column (240px) -->
-      <div class="channel-sidebar col" style="height: 100%;">
-        <!-- Sidebar Header -->
-        <div class="channel-header flex items-center justify-between q-px-md cursor-pointer">
-          <div class="text-weight-bold ellipsis">{{ selectedServer?.name }}</div>
-          <q-icon name="expand_more" size="sm" />
+          <!-- Channels Column (240px) -->
+          <div class="channel-sidebar col" style="height: 100%">
+            <!-- Sidebar Header -->
+            <div class="channel-header flex items-center justify-between q-px-md cursor-pointer">
+              <div class="text-weight-bold ellipsis">{{ selectedServer?.name }}</div>
+              <q-icon name="expand_more" size="sm" />
 
-          <q-menu anchor="bottom left" self="top left" :offset="[0, 4]" class="discord-bg text-white">
-            <q-list dense style="min-width: 180px">
-              <q-item clickable v-close-popup @click="inviteToTeam" class="text-white hover-bg-grey-9">
-                <q-item-section>Pozvať do tímu</q-item-section>
-                <q-item-section side>
-                  <q-icon name="person_add" size="xs" color="primary" />
-                </q-item-section>
-              </q-item>
-              <q-item clickable v-close-popup @click="leaveServer" class="text-red-4 hover-bg-grey-9">
-                <q-item-section>Odísť zo servera</q-item-section>
-                <q-item-section side>
-                  <q-icon name="logout" size="xs" color="red-4" />
-                </q-item-section>
-              </q-item>
-              <q-item v-if="isServerAdmin" clickable v-close-popup @click="deleteServer" class="text-red-4 hover-bg-grey-9">
-                <q-item-section>Zmazať server</q-item-section>
-                <q-item-section side>
-                  <q-icon name="delete" size="xs" color="red-4" />
-                </q-item-section>
-              </q-item>
-            </q-list>
-          </q-menu>
+              <q-menu
+                anchor="bottom left"
+                self="top left"
+                :offset="[0, 4]"
+                class="discord-bg text-white"
+              >
+                <q-list dense style="min-width: 180px">
+                  <q-item
+                    clickable
+                    v-close-popup
+                    @click="inviteToTeam"
+                    class="text-white hover-bg-grey-9"
+                  >
+                    <q-item-section>Pozvať do tímu</q-item-section>
+                    <q-item-section side>
+                      <q-icon name="person_add" size="xs" color="primary" />
+                    </q-item-section>
+                  </q-item>
+                  <q-item
+                    clickable
+                    v-close-popup
+                    @click="leaveServer"
+                    class="text-red-4 hover-bg-grey-9"
+                  >
+                    <q-item-section>Odísť zo servera</q-item-section>
+                    <q-item-section side>
+                      <q-icon name="logout" size="xs" color="red-4" />
+                    </q-item-section>
+                  </q-item>
+                  <q-item
+                    v-if="isServerAdmin"
+                    clickable
+                    v-close-popup
+                    @click="deleteServer"
+                    class="text-red-4 hover-bg-grey-9"
+                  >
+                    <q-item-section>Zmazať server</q-item-section>
+                    <q-item-section side>
+                      <q-icon name="delete" size="xs" color="red-4" />
+                    </q-item-section>
+                  </q-item>
+                </q-list>
+              </q-menu>
+            </div>
+
+            <q-scroll-area
+              style="height: calc(100% - 48px)"
+              :horizontal-thumb-style="{ opacity: '0' }"
+            >
+              <div class="q-pa-sm">
+                <!-- Top section for invites -->
+                <div v-if="invitedChannels.length > 0" class="q-mb-md">
+                  <div class="text-overline text-grey-5 q-px-sm" style="line-height: 1">
+                    POZVÁNKY
+                  </div>
+                  <q-list dense>
+                    <q-item
+                      v-for="channel in invitedChannels"
+                      :key="channel.id"
+                      clickable
+                      v-ripple
+                      :to="'/' + channel.name"
+                      exact
+                      class="channel-item invite-highlight q-mt-xs rounded-borders"
+                      active-class="text-white bg-grey-9"
+                    >
+                      <q-item-section avatar style="min-width: 30px; padding-right: 0">
+                        <q-icon
+                          :name="channel.type === 'private' ? 'lock' : 'tag'"
+                          size="xs"
+                          color="primary"
+                        />
+                      </q-item-section>
+                      <q-item-section class="text-weight-bold text-primary">
+                        {{ channel.name }}
+                      </q-item-section>
+                    </q-item>
+                  </q-list>
+                </div>
+
+                <!-- Regular channels list -->
+                <div class="flex items-center justify-between q-px-sm q-mt-sm q-mb-xs group-header">
+                  <div class="text-overline text-grey-5" style="line-height: 1">TEXTOVÉ KANÁLY</div>
+                  <q-btn
+                    flat
+                    round
+                    dense
+                    icon="add"
+                    size="xs"
+                    color="grey-5"
+                    class="add-btn"
+                    @click="createChannel"
+                  />
+                </div>
+
+                <div
+                  v-if="regularChannels.length === 0"
+                  class="text-caption text-grey-6 q-px-sm q-py-xs"
+                >
+                  Nie si členom žiadneho kanála.
+                </div>
+
+                <q-list v-else dense>
+                  <q-item
+                    v-for="channel in regularChannels"
+                    :key="channel.id"
+                    clickable
+                    v-ripple
+                    :to="'/' + channel.name"
+                    exact
+                    class="channel-item q-mb-xs rounded-borders text-grey-5"
+                    active-class="text-white bg-grey-9"
+                  >
+                    <q-item-section avatar style="min-width: 30px; padding-right: 0">
+                      <q-icon :name="channel.type === 'private' ? 'lock' : 'tag'" size="xs" />
+                    </q-item-section>
+                    <q-item-section>
+                      {{ channel.name }}
+                    </q-item-section>
+
+                    <!-- Action buttons (Leave / Delete) shown on hover or active -->
+                    <q-item-section side class="channel-actions">
+                      <div class="row q-gutter-xs">
+                        <q-btn
+                          v-if="channel.isAdmin"
+                          flat
+                          round
+                          dense
+                          icon="delete"
+                          size="xs"
+                          color="negative"
+                          @click.prevent.stop="deleteChannel(channel.name)"
+                          title="Zmazať kanál (/quit)"
+                        />
+                        <q-btn
+                          flat
+                          round
+                          dense
+                          icon="logout"
+                          size="xs"
+                          color="grey-4"
+                          @click.prevent.stop="leaveChannel(channel.name)"
+                          title="Opustiť kanál (/cancel)"
+                        />
+                      </div>
+                    </q-item-section>
+                  </q-item>
+                </q-list>
+
+                <!-- Discoverable public channels section -->
+                <div v-if="discoverableChannels.length > 0" class="q-mt-md">
+                  <div class="text-overline text-grey-5 q-px-sm" style="line-height: 1">
+                    DOSTUPNÉ VEREJNÉ KANÁLY
+                  </div>
+                  <q-list dense>
+                    <q-item
+                      v-for="channel in discoverableChannels"
+                      :key="channel.id"
+                      clickable
+                      v-ripple
+                      :to="'/' + channel.name"
+                      exact
+                      class="channel-item q-mb-xs rounded-borders text-grey-6"
+                      active-class="text-white bg-grey-9"
+                    >
+                      <q-item-section avatar style="min-width: 30px; padding-right: 0">
+                        <q-icon name="tag" size="xs" color="grey-6" />
+                      </q-item-section>
+                      <q-item-section>
+                        {{ channel.name }}
+                      </q-item-section>
+                      <q-item-section side class="channel-actions">
+                        <q-btn
+                          flat
+                          round
+                          dense
+                          icon="login"
+                          size="xs"
+                          color="primary"
+                          title="Pripojiť sa do kanála (/join)"
+                          @click.prevent.stop="joinChannel(channel.name)"
+                        />
+                      </q-item-section>
+                    </q-item>
+                  </q-list>
+                </div>
+              </div>
+            </q-scroll-area>
+          </div>
         </div>
 
-        <q-scroll-area style="height: calc(100% - 48px);" :horizontal-thumb-style="{ opacity: '0' }">
-          <div class="q-pa-sm">
-            <!-- Top section for invites -->
-            <div v-if="invitedChannels.length > 0" class="q-mb-md">
-              <div class="text-overline text-grey-5 q-px-sm" style="line-height: 1">POZVÁNKY</div>
-              <q-list dense>
-                <q-item 
-                  v-for="channel in invitedChannels" 
-                  :key="channel.id" 
-                  clickable 
-                  v-ripple
-                  :to="'/' + channel.name"
-                  exact
-                  class="channel-item invite-highlight q-mt-xs rounded-borders"
-                  active-class="text-white bg-grey-9"
+        <!-- Status bar používateľa -->
+        <div class="user-bar row no-wrap items-center q-px-sm">
+          <div
+            class="user-info row no-wrap items-center col cursor-pointer rounded-borders q-pa-xs"
+          >
+            <div class="user-avatar-wrapper">
+              <q-avatar size="32px" color="primary" text-color="white">
+                {{ currentUser.username.charAt(0).toUpperCase() }}
+              </q-avatar>
+              <span class="status-dot" :style="{ backgroundColor: currentStatus.color }" />
+            </div>
+            <div class="col q-ml-sm" style="min-width: 0">
+              <div class="text-weight-bold ellipsis" style="font-size: 14px; line-height: 1.2">
+                {{ currentUser.username }}
+              </div>
+              <div class="text-grey-5 ellipsis" style="font-size: 12px; line-height: 1.2">
+                {{ currentStatus.label }}
+              </div>
+            </div>
+
+            <q-menu anchor="top left" self="bottom left" :offset="[0, 8]" class="status-menu">
+              <q-list dense style="min-width: 180px">
+                <q-item
+                  v-for="option in statusOptions"
+                  :key="option.value"
+                  clickable
+                  v-close-popup
+                  :active="option.value === currentUser.status"
+                  active-class="bg-grey-9"
+                  @click="setStatus(option.value)"
                 >
-                  <q-item-section avatar style="min-width: 30px; padding-right: 0;">
-                    <q-icon :name="channel.type === 'private' ? 'lock' : 'tag'" size="xs" color="primary" />
+                  <q-item-section avatar style="min-width: 24px; padding-right: 0">
+                    <span
+                      class="status-dot status-dot--inline"
+                      :style="{ backgroundColor: option.color }"
+                    />
                   </q-item-section>
-                  <q-item-section class="text-weight-bold text-primary">
-                    {{ channel.name }}
+                  <q-item-section>{{ option.label }}</q-item-section>
+                </q-item>
+              </q-list>
+            </q-menu>
+          </div>
+
+          <q-btn
+            flat
+            round
+            dense
+            icon="settings"
+            size="sm"
+            class="q-ml-xs text-grey-5"
+            title="Nastavenia"
+          >
+            <q-menu
+              anchor="top right"
+              self="bottom right"
+              :offset="[0, 8]"
+              class="discord-bg text-white"
+            >
+              <q-list dense style="min-width: 150px">
+                <q-item clickable v-close-popup @click="logout" class="text-red-4 hover-bg-grey-9">
+                  <q-item-section>Odhlásiť sa</q-item-section>
+                  <q-item-section side>
+                    <q-icon name="logout" size="xs" color="red-4" />
                   </q-item-section>
                 </q-item>
               </q-list>
-            </div>
-
-            <!-- Regular channels list -->
-            <div class="flex items-center justify-between q-px-sm q-mt-sm q-mb-xs group-header">
-              <div class="text-overline text-grey-5" style="line-height: 1">TEXTOVÉ KANÁLY</div>
-              <q-btn flat round dense icon="add" size="xs" color="grey-5" class="add-btn" @click="createChannel" />
-            </div>
-            
-            <q-list dense>
-              <q-item 
-                v-for="channel in regularChannels" 
-                :key="channel.id" 
-                clickable 
-                v-ripple
-                :to="'/' + channel.name"
-                exact
-                class="channel-item q-mb-xs rounded-borders text-grey-5"
-                active-class="text-white bg-grey-9"
-              >
-                <q-item-section avatar style="min-width: 30px; padding-right: 0;">
-                  <q-icon :name="channel.type === 'private' ? 'lock' : 'tag'" size="xs" />
-                </q-item-section>
-                <q-item-section>
-                  {{ channel.name }}
-                </q-item-section>
-                
-                <!-- Action buttons (Leave / Delete) shown on hover or active -->
-                <q-item-section side class="channel-actions">
-                  <div class="row q-gutter-xs">
-                    <q-btn v-if="channel.isAdmin" flat round dense icon="delete" size="xs" color="negative" @click.prevent.stop="deleteChannel(channel.name)" title="Zmazať kanál (/quit)" />
-                    <q-btn flat round dense icon="logout" size="xs" color="grey-4" @click.prevent.stop="leaveChannel(channel.name)" title="Opustiť kanál (/cancel)" />
-                  </div>
-                </q-item-section>
-              </q-item>
-            </q-list>
-          </div>
-        </q-scroll-area>
-      </div>
-      </div>
-
-      <!-- Status bar používateľa -->
-      <div class="user-bar row no-wrap items-center q-px-sm">
-        <div class="user-info row no-wrap items-center col cursor-pointer rounded-borders q-pa-xs">
-          <div class="user-avatar-wrapper">
-            <q-avatar size="32px" color="primary" text-color="white">
-              {{ currentUser.username.charAt(0).toUpperCase() }}
-            </q-avatar>
-            <span class="status-dot" :style="{ backgroundColor: currentStatus.color }" />
-          </div>
-          <div class="col q-ml-sm" style="min-width: 0;">
-            <div class="text-weight-bold ellipsis" style="font-size: 14px; line-height: 1.2;">
-              {{ currentUser.username }}
-            </div>
-            <div class="text-grey-5 ellipsis" style="font-size: 12px; line-height: 1.2;">
-              {{ currentStatus.label }}
-            </div>
-          </div>
-
-          <q-menu anchor="top left" self="bottom left" :offset="[0, 8]" class="status-menu">
-            <q-list dense style="min-width: 180px;">
-              <q-item
-                v-for="option in statusOptions"
-                :key="option.value"
-                clickable
-                v-close-popup
-                :active="option.value === currentUser.status"
-                active-class="bg-grey-9"
-                @click="setStatus(option.value)"
-              >
-                <q-item-section avatar style="min-width: 24px; padding-right: 0;">
-                  <span class="status-dot status-dot--inline" :style="{ backgroundColor: option.color }" />
-                </q-item-section>
-                <q-item-section>{{ option.label }}</q-item-section>
-              </q-item>
-            </q-list>
-          </q-menu>
+            </q-menu>
+          </q-btn>
         </div>
-
-        <q-btn flat round dense icon="settings" size="sm" class="q-ml-xs text-grey-5" title="Nastavenia">
-          <q-menu anchor="top right" self="bottom right" :offset="[0, 8]" class="discord-bg text-white">
-            <q-list dense style="min-width: 150px">
-              <q-item clickable v-close-popup @click="logout" class="text-red-4 hover-bg-grey-9">
-                <q-item-section>Odhlásiť sa</q-item-section>
-                <q-item-section side>
-                  <q-icon name="logout" size="xs" color="red-4" />
-                </q-item-section>
-              </q-item>
-            </q-list>
-          </q-menu>
-        </q-btn>
       </div>
-     </div>
     </q-drawer>
 
     <q-page-container>
@@ -262,7 +387,10 @@ export default defineComponent({
     ...mapStores(useAuthStore, useChatStore),
 
     currentStatus(): StatusOption {
-      return this.statusOptions.find(o => o.value === this.currentUser.status) ?? this.statusOptions[0]!;
+      return (
+        this.statusOptions.find((o) => o.value === this.currentUser.status) ??
+        this.statusOptions[0]!
+      );
     },
 
     servers(): ServerItem[] {
@@ -282,12 +410,11 @@ export default defineComponent({
       const currentNick = this.authStore.currentUser || '';
       return (this.selectedServer?.channels || [])
         .filter((c: ChannelItem) => {
-          if (!this.hasChannelAccess(c)) return false;
-          return (
-            Array.isArray(c.invited) &&
-            c.invited.includes(currentNick) &&
-            (!Array.isArray(c.members) || !c.members.includes(currentNick))
-          );
+          const isBanned = Array.isArray(c.banned) && c.banned.includes(currentNick);
+          if (isBanned) return false;
+          const isMember = Array.isArray(c.members) && c.members.includes(currentNick);
+          const isInvited = Array.isArray(c.invited) && c.invited.includes(currentNick);
+          return isInvited && !isMember;
         })
         .map((c: ChannelItem) => ({
           ...c,
@@ -300,15 +427,28 @@ export default defineComponent({
       const currentNick = this.authStore.currentUser || '';
       return (this.selectedServer?.channels || [])
         .filter((c: ChannelItem) => {
-          if (!this.hasChannelAccess(c)) return false;
-          if (
-            Array.isArray(c.invited) &&
-            c.invited.includes(currentNick) &&
-            (!Array.isArray(c.members) || !c.members.includes(currentNick))
-          ) {
-            return false;
-          }
-          return true;
+          const isBanned = Array.isArray(c.banned) && c.banned.includes(currentNick);
+          if (isBanned) return false;
+          const isMember = Array.isArray(c.members) && c.members.includes(currentNick);
+          return isMember;
+        })
+        .map((c: ChannelItem) => ({
+          ...c,
+          isInvited: false,
+          isAdmin: c.admin === currentNick,
+        }));
+    },
+
+    discoverableChannels() {
+      const currentNick = this.authStore.currentUser || '';
+      return (this.selectedServer?.channels || [])
+        .filter((c: ChannelItem) => {
+          if (c.type !== 'public') return false;
+          const isBanned = Array.isArray(c.banned) && c.banned.includes(currentNick);
+          if (isBanned) return false;
+          const isMember = Array.isArray(c.members) && c.members.includes(currentNick);
+          const isInvited = Array.isArray(c.invited) && c.invited.includes(currentNick);
+          return !isMember && !isInvited;
         })
         .map((c: ChannelItem) => ({
           ...c,
@@ -340,15 +480,37 @@ export default defineComponent({
 
     async selectServer(id: number) {
       this.chatStore.selectServer(id);
-      const server = this.chatStore.servers.find(s => s.id === id);
-      const accessibleChannels = (server?.channels || []).filter((c: ChannelItem) => this.hasChannelAccess(c));
-      const firstChannel = accessibleChannels[0]?.name || server?.channels[0]?.name || 'všeobecný';
+      const server = this.chatStore.servers.find((s) => s.id === id);
+      const currentNick = this.authStore.currentUser || '';
+      const memberChannels = (server?.channels || []).filter(
+        (c: ChannelItem) =>
+          Array.isArray(c.members) &&
+          c.members.includes(currentNick) &&
+          (!Array.isArray(c.banned) || !c.banned.includes(currentNick)),
+      );
+      const invitedChannels = (server?.channels || []).filter(
+        (c: ChannelItem) =>
+          Array.isArray(c.invited) &&
+          c.invited.includes(currentNick) &&
+          (!Array.isArray(c.banned) || !c.banned.includes(currentNick)),
+      );
+      const accessibleChannels = (server?.channels || []).filter((c: ChannelItem) =>
+        this.hasChannelAccess(c),
+      );
+      const firstChannel =
+        memberChannels[0]?.name ||
+        invitedChannels[0]?.name ||
+        accessibleChannels[0]?.name ||
+        server?.channels[0]?.name ||
+        'všeobecný';
       await this.$router.push('/' + firstChannel);
     },
 
     inviteToTeam() {
       if (!this.selectedServer) return;
-      const nick = prompt(`Zadaj používateľské meno (prezývku) na pozvanie do tímu "${this.selectedServer.name}":`);
+      const nick = prompt(
+        `Zadaj používateľské meno (prezývku) na pozvanie do tímu "${this.selectedServer.name}":`,
+      );
       if (!nick || !nick.trim()) return;
       const targetNick = nick.trim();
       const currentNick = this.authStore.currentUser || '';
@@ -364,7 +526,10 @@ export default defineComponent({
       const name = prompt('Názov nového servera (alebo použi príkaz /create <nazov> [private]):');
       if (!name) return;
       const isPrivate = confirm('Má byť server súkromný? (OK = Áno, Zrušiť = Nie)');
-      const res = this.chatStore.executeCommand('všeobecný', `/create ${name} ${isPrivate ? 'private' : ''}`);
+      const res = this.chatStore.executeCommand(
+        'všeobecný',
+        `/create ${name} ${isPrivate ? 'private' : ''}`,
+      );
       if (res.redirectUrl) {
         await this.$router.push(res.redirectUrl);
       }
@@ -376,8 +541,15 @@ export default defineComponent({
       const currentNick = this.authStore.currentUser || '';
 
       if (this.isServerAdmin) {
-        if (confirm(`Ako správca servera "${serverName}" jeho opustením server zrušíš (/delete). Naozaj chceš odísť?`)) {
-          const res = this.chatStore.executeCommand(this.selectedServer.channels[0]?.name || 'všeobecný', '/delete');
+        if (
+          confirm(
+            `Ako správca servera "${serverName}" jeho opustením server zrušíš (/delete). Naozaj chceš odísť?`,
+          )
+        ) {
+          const res = this.chatStore.executeCommand(
+            this.selectedServer.channels[0]?.name || 'všeobecný',
+            '/delete',
+          );
           if (res.redirectUrl) {
             await this.$router.push(res.redirectUrl);
           }
@@ -387,7 +559,9 @@ export default defineComponent({
 
       if (confirm(`Naozaj chceš odísť zo servera "${serverName}"?`)) {
         if (Array.isArray(this.selectedServer.members)) {
-          this.selectedServer.members = this.selectedServer.members.filter((m: string) => m !== currentNick);
+          this.selectedServer.members = this.selectedServer.members.filter(
+            (m: string) => m !== currentNick,
+          );
         }
         for (const channel of this.selectedServer.channels) {
           if (Array.isArray(channel.members)) {
@@ -399,12 +573,31 @@ export default defineComponent({
         }
         this.chatStore.saveServers();
 
-        const visibleServers = this.servers.filter(s => s.id !== this.selectedServerId);
+        const visibleServers = this.servers.filter((s) => s.id !== this.selectedServerId);
         const nextServ = visibleServers[0];
         if (nextServ) {
           this.chatStore.selectServer(nextServ.id);
-          const accessibleChannels = (nextServ.channels || []).filter((c: ChannelItem) => this.hasChannelAccess(c));
-          const nextChannel = accessibleChannels[0]?.name || nextServ.channels[0]?.name || 'všeobecný';
+          const memberChannels = (nextServ.channels || []).filter(
+            (c: ChannelItem) =>
+              Array.isArray(c.members) &&
+              c.members.includes(currentNick) &&
+              (!Array.isArray(c.banned) || !c.banned.includes(currentNick)),
+          );
+          const invitedChannels = (nextServ.channels || []).filter(
+            (c: ChannelItem) =>
+              Array.isArray(c.invited) &&
+              c.invited.includes(currentNick) &&
+              (!Array.isArray(c.banned) || !c.banned.includes(currentNick)),
+          );
+          const accessibleChannels = (nextServ.channels || []).filter((c: ChannelItem) =>
+            this.hasChannelAccess(c),
+          );
+          const nextChannel =
+            memberChannels[0]?.name ||
+            invitedChannels[0]?.name ||
+            accessibleChannels[0]?.name ||
+            nextServ.channels[0]?.name ||
+            'všeobecný';
           await this.$router.push('/' + nextChannel);
           this.chatStore.addSystemMessage(nextChannel, `Opustil si server "${serverName}".`);
         } else {
@@ -417,7 +610,10 @@ export default defineComponent({
       if (!this.selectedServer) return;
       const serverName = this.selectedServer.name;
       if (confirm(`Naozaj chceš zmazať server "${serverName}"? Ako správca ho vymažeš natrvalo.`)) {
-        const res = this.chatStore.executeCommand(this.selectedServer.channels[0]?.name || 'všeobecný', '/delete');
+        const res = this.chatStore.executeCommand(
+          this.selectedServer.channels[0]?.name || 'všeobecný',
+          '/delete',
+        );
         if (res.redirectUrl) {
           await this.$router.push(res.redirectUrl);
         }
@@ -429,7 +625,10 @@ export default defineComponent({
       const name = prompt('Názov nového kanála (alebo použi príkaz /join <nazov> [private]):');
       if (!name) return;
       const isPrivate = confirm('Má byť kanál súkromný? (OK = Áno, Zrušiť = Nie)');
-      const res = this.chatStore.executeCommand(this.selectedServer?.channels[0]?.name || 'všeobecný', `/join ${name} ${isPrivate ? 'private' : ''}`);
+      const res = this.chatStore.executeCommand(
+        this.selectedServer?.channels[0]?.name || 'všeobecný',
+        `/join ${name} ${isPrivate ? 'private' : ''}`,
+      );
       if (res.redirectUrl) {
         await this.$router.push(res.redirectUrl);
       }
@@ -450,6 +649,16 @@ export default defineComponent({
         if (res.redirectUrl) {
           await this.$router.push(res.redirectUrl);
         }
+      }
+    },
+
+    async joinChannel(channelName: string) {
+      const res = this.chatStore.executeCommand(channelName, `/join ${channelName}`);
+      this.chatStore.addSystemMessage(channelName, res.message);
+      if (res.redirectUrl) {
+        await this.$router.push(res.redirectUrl);
+      } else {
+        await this.$router.push('/' + channelName);
       }
     },
   },
@@ -483,12 +692,14 @@ export default defineComponent({
 }
 
 .server-btn {
-  transition: border-radius 0.2s ease, background-color 0.2s ease;
+  transition:
+    border-radius 0.2s ease,
+    background-color 0.2s ease;
 }
 
 .server-btn:hover {
   border-radius: 16px;
-  background-color: #5865F2 !important;
+  background-color: #5865f2 !important;
 }
 
 /* Aktívny server - zaoblený štvorec + indikátor vľavo */
@@ -598,5 +809,4 @@ export default defineComponent({
   display: inline-block;
   border: none;
 }
-
 </style>

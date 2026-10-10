@@ -29,10 +29,27 @@ export default defineComponent({
   mounted() {
     const server = this.chatStore.currentServer;
     const currentNick = this.authStore.currentUser || '';
-    const accessibleChannels = (server?.channels || []).filter((c: ChannelItem) =>
-      this.chatStore.hasChannelAccess(c, currentNick)
+    const memberChannels = (server?.channels || []).filter(
+      (c: ChannelItem) =>
+        Array.isArray(c.members) &&
+        c.members.includes(currentNick) &&
+        (!Array.isArray(c.banned) || !c.banned.includes(currentNick)),
     );
-    const firstChannel = accessibleChannels[0]?.name || server?.channels[0]?.name || 'všeobecný';
+    const invitedChannels = (server?.channels || []).filter(
+      (c: ChannelItem) =>
+        Array.isArray(c.invited) &&
+        c.invited.includes(currentNick) &&
+        (!Array.isArray(c.banned) || !c.banned.includes(currentNick)),
+    );
+    const accessibleChannels = (server?.channels || []).filter((c: ChannelItem) =>
+      this.chatStore.hasChannelAccess(c, currentNick),
+    );
+    const firstChannel =
+      memberChannels[0]?.name ||
+      invitedChannels[0]?.name ||
+      accessibleChannels[0]?.name ||
+      server?.channels[0]?.name ||
+      'všeobecný';
     void this.$router.replace('/' + firstChannel);
   },
 });

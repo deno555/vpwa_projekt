@@ -43,7 +43,10 @@
                 label="Email"
                 outlined
                 autocomplete="email"
-                :rules="[(v) => !!v || 'Email is required', (v) => /.+@.+\..+/.test(v) || 'Invalid email']"
+                :rules="[
+                  (v) => !!v || 'Email is required',
+                  (v) => /.+@.+\..+/.test(v) || 'Invalid email',
+                ]"
                 lazy-rules
               >
                 <template #prepend>

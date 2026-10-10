@@ -21,86 +21,107 @@
       <q-btn flat round dense icon="people_alt" color="grey-5" />
     </q-toolbar>
 
-    <!-- Info Banner (Not a member or Banned) -->
-    <div v-if="!isMember && !isBanned" class="bg-grey-9 text-amber-4 q-px-md q-py-xs row items-center justify-between" style="border-bottom: 1px solid #1e1f22;">
-      <div class="row items-center">
-        <q-icon name="info" size="xs" class="q-mr-sm" />
-        <span class="text-caption">Nie si členom tohto kanála. Ak chceš odosielať správy, napíš <strong>/join {{ channelName }}</strong></span>
-      </div>
-      <q-btn dense outline color="amber-4" size="sm" label="Pripojiť sa (/join)" @click="quickJoin" />
-    </div>
-    <div v-else-if="isBanned" class="bg-negative text-white q-px-md q-py-xs row items-center" style="border-bottom: 1px solid #1e1f22;">
-      <q-icon name="block" size="xs" class="q-mr-sm" />
-      <span class="text-caption">V tomto kanáli máš trvalý ban. Správy nemôžeš odosielať.</span>
-    </div>
-
-    <!-- Chat Messages Area -->
-    <q-scroll-area ref="chatScroll" class="col q-pa-md bg-discord-main">
-      <div class="column justify-end" style="min-height: 100%;">
-        <div class="text-center q-my-xl">
-          <q-avatar size="72px" color="grey-8" text-color="white" :icon="currentChannel?.type === 'private' ? 'lock' : 'tag'" class="q-mb-md" />
-          <div class="text-h4 text-weight-bold text-white q-mb-sm">Vitaj v #{{ channelName }}!</div>
-          <div class="text-grey-5">Toto je začiatok histórie tohto kanála. Príkazy zadávaj cez príkazový riadok dole.</div>
+    <!-- Unauthorized / Access Denied -->
+    <div v-if="!hasAccess" class="col flex flex-center bg-discord-main text-white q-pa-xl text-center">
+      <div class="column items-center" style="max-width: 480px;">
+        <q-avatar size="80px" color="red-10" text-color="red-2" icon="lock" class="q-mb-md" />
+        <div class="text-h5 text-weight-bold q-mb-sm">Prístup do kanála je obmedzený</div>
+        <div class="text-grey-5 q-mb-lg">
+          Kanál <strong>#{{ channelName }}</strong> je súkromný alebo k nemu nemáš prístup. Nemáš oprávnenie na zobrazenie správ ani na odosielanie obsahu. Prístup ti môže udeliť iba správca kanála pozvánkou.
         </div>
+        <q-btn
+          color="primary"
+          unelevated
+          no-caps
+          label="Prejsť na dostupný kanál"
+          icon="arrow_back"
+          @click="goToAccessibleChannel"
+        />
+      </div>
+    </div>
 
-        <!-- Messages -->
-        <div v-for="msg in currentMessages" :key="msg.id" class="q-mb-md flex q-py-xs msg-hover" :class="{ 'system-msg-box': msg.isSystem }">
-          <q-avatar size="40px" :color="msg.isSystem ? 'amber-9' : 'primary'" text-color="white" class="q-mr-md" :icon="msg.isSystem ? 'terminal' : undefined">
-            <template v-if="!msg.isSystem">
-              {{ msg.author.charAt(0).toUpperCase() }}
-            </template>
-          </q-avatar>
-          <div class="col" style="min-width: 0;">
-            <div class="flex items-baseline q-mb-xs">
-              <span class="text-weight-bold q-mr-sm" :class="msg.isSystem ? 'text-amber-4' : 'text-white'">{{ msg.author }}</span>
-              <span class="text-grey-5 text-caption">Dnes o {{ msg.time }}</span>
-            </div>
-            <div :class="msg.isSystem ? 'text-amber-2' : 'text-grey-3'" style="word-break: break-word; white-space: pre-line;">
-              {{ msg.text }}
+    <template v-else>
+      <!-- Info Banner (Not a member or Banned) -->
+      <div v-if="!isMember && !isBanned" class="bg-grey-9 text-amber-4 q-px-md q-py-xs row items-center justify-between" style="border-bottom: 1px solid #1e1f22;">
+        <div class="row items-center">
+          <q-icon name="info" size="xs" class="q-mr-sm" />
+          <span class="text-caption">Nie si členom tohto kanála. Ak chceš odosielať správy, napíš <strong>/join {{ channelName }}</strong></span>
+        </div>
+        <q-btn dense outline color="amber-4" size="sm" label="Pripojiť sa (/join)" @click="quickJoin" />
+      </div>
+      <div v-else-if="isBanned" class="bg-negative text-white q-px-md q-py-xs row items-center" style="border-bottom: 1px solid #1e1f22;">
+        <q-icon name="block" size="xs" class="q-mr-sm" />
+        <span class="text-caption">V tomto kanáli máš trvalý ban. Správy nemôžeš odosielať.</span>
+      </div>
+
+      <!-- Chat Messages Area -->
+      <q-scroll-area ref="chatScroll" class="col q-pa-md bg-discord-main">
+        <div class="column justify-end" style="min-height: 100%;">
+          <div class="text-center q-my-xl">
+            <q-avatar size="72px" color="grey-8" text-color="white" :icon="currentChannel?.type === 'private' ? 'lock' : 'tag'" class="q-mb-md" />
+            <div class="text-h4 text-weight-bold text-white q-mb-sm">Vitaj v #{{ channelName }}!</div>
+            <div class="text-grey-5">Toto je začiatok histórie tohto kanála. Príkazy zadávaj cez príkazový riadok dole.</div>
+          </div>
+
+          <!-- Messages -->
+          <div v-for="msg in currentMessages" :key="msg.id" class="q-mb-md flex q-py-xs msg-hover" :class="{ 'system-msg-box': msg.isSystem }">
+            <q-avatar size="40px" :color="msg.isSystem ? 'amber-9' : 'primary'" text-color="white" class="q-mr-md" :icon="msg.isSystem ? 'terminal' : undefined">
+              <template v-if="!msg.isSystem">
+                {{ msg.author.charAt(0).toUpperCase() }}
+              </template>
+            </q-avatar>
+            <div class="col" style="min-width: 0;">
+              <div class="flex items-baseline q-mb-xs">
+                <span class="text-weight-bold q-mr-sm" :class="msg.isSystem ? 'text-amber-4' : 'text-white'">{{ msg.author }}</span>
+                <span class="text-grey-5 text-caption">Dnes o {{ msg.time }}</span>
+              </div>
+              <div :class="msg.isSystem ? 'text-amber-2' : 'text-grey-3'" style="word-break: break-word; white-space: pre-line;">
+                {{ msg.text }}
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </q-scroll-area>
+      </q-scroll-area>
 
-    <!-- Message Input Area (Príkazový riadok) -->
-    <div class="bg-discord-main q-px-md q-pt-xs q-pb-sm">
-      <q-input
-        v-model="newMessage"
-        dense
-        standout="bg-grey-9"
-        bg-color="grey-9"
-        dark
-        rounded
-        :placeholder="inputPlaceholder"
-        class="full-width"
-        @keyup.enter="sendMessage"
-        @update:model-value="onInputUpdate"
-      >
-        <template #prepend>
-          <q-btn flat round dense icon="terminal" color="amber-5" title="Príkazy terminálu (/help)" @click="showHelp" />
-        </template>
-        <template #append>
-          <q-btn flat round dense icon="send" color="primary" @click="sendMessage" title="Odoslať správu / príkaz" />
-          <q-btn flat round dense icon="emoji_emotions" color="grey-5" />
-        </template>
-      </q-input>
+      <!-- Message Input Area (Príkazový riadok) -->
+      <div class="bg-discord-main q-px-md q-pt-xs q-pb-sm">
+        <q-input
+          v-model="newMessage"
+          dense
+          standout="bg-grey-9"
+          bg-color="grey-9"
+          dark
+          rounded
+          :placeholder="inputPlaceholder"
+          class="full-width"
+          @keyup.enter="sendMessage"
+          @update:model-value="onInputUpdate"
+        >
+          <template #prepend>
+            <q-btn flat round dense icon="terminal" color="amber-5" title="Príkazy terminálu (/help)" @click="showHelp" />
+          </template>
+          <template #append>
+            <q-btn flat round dense icon="send" color="primary" @click="sendMessage" title="Odoslať správu / príkaz" />
+            <q-btn flat round dense icon="emoji_emotions" color="grey-5" />
+          </template>
+        </q-input>
 
-      <!-- Typing indicator -->
-      <div class="typing-bar row items-center q-px-xs">
-        <transition name="typing-fade">
-          <div v-if="typingText" class="row items-center text-caption text-grey-4">
-            <span class="typing-dots q-mr-xs">
-              <span class="dot"></span>
-              <span class="dot"></span>
-              <span class="dot"></span>
-            </span>
-            <span class="text-weight-bold text-white q-mr-xs">{{ typingUserText }}</span>
-            <span>{{ typingSuffix }}</span>
-          </div>
-        </transition>
+        <!-- Typing indicator -->
+        <div class="typing-bar row items-center q-px-xs">
+          <transition name="typing-fade">
+            <div v-if="typingText" class="row items-center text-caption text-grey-4">
+              <span class="typing-dots q-mr-xs">
+                <span class="dot"></span>
+                <span class="dot"></span>
+                <span class="dot"></span>
+              </span>
+              <span class="text-weight-bold text-white q-mr-xs">{{ typingUserText }}</span>
+              <span>{{ typingSuffix }}</span>
+            </div>
+          </transition>
+        </div>
       </div>
-    </div>
+    </template>
   </q-page>
 </template>
 
@@ -109,6 +130,15 @@ import { defineComponent } from 'vue';
 import { mapStores } from 'pinia';
 import { useChatStore, useAuthStore } from '@/stores/store';
 import type { QScrollArea } from 'quasar';
+
+interface ChannelItem {
+  name: string;
+  type: 'public' | 'private';
+  admin: string;
+  members: string[];
+  invited: string[];
+  banned: string[];
+}
 
 export default defineComponent({
   name: 'ChannelPage',
@@ -140,6 +170,11 @@ export default defineComponent({
 
     currentChannel() {
       return this.channelInfo ? this.channelInfo.channel : null;
+    },
+
+    hasAccess(): boolean {
+      if (!this.currentChannel) return false;
+      return this.chatStore.hasChannelAccess(this.currentChannel, this.currentUsername);
     },
 
     isMember(): boolean {
@@ -277,12 +312,22 @@ export default defineComponent({
       this.chatStore.setTyping(this.channelName, currentUser, false);
     },
 
+    goToAccessibleChannel() {
+      const server = this.chatStore.currentServer;
+      const accessibleChannels = (server?.channels || []).filter((c: ChannelItem) =>
+        this.chatStore.hasChannelAccess(c, this.currentUsername)
+      );
+      const nextChannel = accessibleChannels[0]?.name || server?.channels[0]?.name || 'všeobecný';
+      void this.$router.push('/' + nextChannel);
+    },
+
     showHelp() {
       const res = this.chatStore.executeCommand(this.channelName, '/help');
       this.chatStore.addSystemMessage(this.channelName, res.message);
     },
 
     quickJoin() {
+      if (!this.hasAccess) return;
       const res = this.chatStore.executeCommand(this.channelName, `/join ${this.channelName}`);
       this.chatStore.addSystemMessage(this.channelName, res.message);
       if (res.redirectUrl) {
@@ -291,6 +336,7 @@ export default defineComponent({
     },
 
     sendMessage() {
+      if (!this.hasAccess) return;
       const text = this.newMessage.trim();
       if (!text) return;
 

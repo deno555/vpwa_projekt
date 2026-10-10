@@ -8,17 +8,31 @@
 <script lang="ts">
 import { defineComponent } from 'vue';
 import { mapStores } from 'pinia';
-import { useChatStore } from '@/stores/store';
+import { useChatStore, useAuthStore } from '@/stores/store';
+
+interface ChannelItem {
+  name: string;
+  type: 'public' | 'private';
+  admin: string;
+  members: string[];
+  invited: string[];
+  banned: string[];
+}
 
 export default defineComponent({
   name: 'IndexPage',
 
   computed: {
-    ...mapStores(useChatStore),
+    ...mapStores(useChatStore, useAuthStore),
   },
 
   mounted() {
-    const firstChannel = this.chatStore.currentServer?.channels[0]?.name || 'všeobecný';
+    const server = this.chatStore.currentServer;
+    const currentNick = this.authStore.currentUser || '';
+    const accessibleChannels = (server?.channels || []).filter((c: ChannelItem) =>
+      this.chatStore.hasChannelAccess(c, currentNick)
+    );
+    const firstChannel = accessibleChannels[0]?.name || server?.channels[0]?.name || 'všeobecný';
     void this.$router.replace('/' + firstChannel);
   },
 });

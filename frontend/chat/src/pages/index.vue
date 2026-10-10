@@ -56,6 +56,12 @@
 
           <q-menu anchor="bottom left" self="top left" :offset="[0, 4]" class="discord-bg text-white">
             <q-list dense style="min-width: 180px">
+              <q-item clickable v-close-popup @click="inviteToTeam" class="text-white hover-bg-grey-9">
+                <q-item-section>Pozvať do tímu</q-item-section>
+                <q-item-section side>
+                  <q-icon name="person_add" size="xs" color="primary" />
+                </q-item-section>
+              </q-item>
               <q-item clickable v-close-popup @click="leaveServer" class="text-red-4 hover-bg-grey-9">
                 <q-item-section>Odísť zo servera</q-item-section>
                 <q-item-section side>
@@ -227,6 +233,15 @@ interface ChannelItem {
   kicks: Record<string, string[]>;
 }
 
+interface ServerItem {
+  id: number;
+  name: string;
+  type: 'public' | 'private';
+  admin: string;
+  members: string[];
+  channels: ChannelItem[];
+}
+
 export default defineComponent({
   name: 'MainLayout',
 
@@ -250,23 +265,30 @@ export default defineComponent({
       return this.statusOptions.find(o => o.value === this.currentUser.status) ?? this.statusOptions[0]!;
     },
 
-    servers() {
-      return this.chatStore.servers;
+    servers(): ServerItem[] {
+      return this.chatStore.visibleServers;
     },
 
     selectedServerId(): number {
-      return this.chatStore.selectedServerId;
+      return this.selectedServer ? this.selectedServer.id : 0;
     },
 
-    selectedServer() {
-      return this.chatStore.currentServer;
+    selectedServer(): ServerItem | null {
+      return (this.chatStore.currentServer as ServerItem) || null;
     },
 
     // Computed vlastnosti pre rozdelenie zoznamu kanálov
     invitedChannels() {
       const currentNick = this.authStore.currentUser || '';
       return (this.selectedServer?.channels || [])
-        .filter((c: ChannelItem) => Array.isArray(c.invited) && c.invited.includes(currentNick) && (!Array.isArray(c.members) || !c.members.includes(currentNick)))
+        .filter((c: ChannelItem) => {
+          if (!this.hasChannelAccess(c)) return false;
+          return (
+            Array.isArray(c.invited) &&
+            c.invited.includes(currentNick) &&
+            (!Array.isArray(c.members) || !c.members.includes(currentNick))
+          );
+        })
         .map((c: ChannelItem) => ({
           ...c,
           isInvited: true,
@@ -277,7 +299,17 @@ export default defineComponent({
     regularChannels() {
       const currentNick = this.authStore.currentUser || '';
       return (this.selectedServer?.channels || [])
-        .filter((c: ChannelItem) => !Array.isArray(c.invited) || !c.invited.includes(currentNick) || (Array.isArray(c.members) && c.members.includes(currentNick)))
+        .filter((c: ChannelItem) => {
+          if (!this.hasChannelAccess(c)) return false;
+          if (
+            Array.isArray(c.invited) &&
+            c.invited.includes(currentNick) &&
+            (!Array.isArray(c.members) || !c.members.includes(currentNick))
+          ) {
+            return false;
+          }
+          return true;
+        })
         .map((c: ChannelItem) => ({
           ...c,
           isInvited: false,
@@ -296,6 +328,11 @@ export default defineComponent({
       this.currentUser.status = status;
     },
 
+    hasChannelAccess(channel: ChannelItem): boolean {
+      const currentNick = this.authStore.currentUser || '';
+      return this.chatStore.hasChannelAccess(channel, currentNick);
+    },
+
     async logout() {
       this.authStore.logout();
       await this.$router.push('/login');
@@ -303,8 +340,24 @@ export default defineComponent({
 
     async selectServer(id: number) {
       this.chatStore.selectServer(id);
-      const firstChannel = this.chatStore.currentServer?.channels[0]?.name || 'všeobecný';
+      const server = this.chatStore.servers.find(s => s.id === id);
+      const accessibleChannels = (server?.channels || []).filter((c: ChannelItem) => this.hasChannelAccess(c));
+      const firstChannel = accessibleChannels[0]?.name || server?.channels[0]?.name || 'všeobecný';
       await this.$router.push('/' + firstChannel);
+    },
+
+    inviteToTeam() {
+      if (!this.selectedServer) return;
+      const nick = prompt(`Zadaj používateľské meno (prezývku) na pozvanie do tímu "${this.selectedServer.name}":`);
+      if (!nick || !nick.trim()) return;
+      const targetNick = nick.trim();
+      const currentNick = this.authStore.currentUser || '';
+      if (targetNick === currentNick) {
+        alert('Nemôžeš pozvať sám seba.');
+        return;
+      }
+      const res = this.chatStore.inviteUserToTeam(this.selectedServer.id, targetNick);
+      alert(res.message);
     },
 
     async createServerPrompt() {
@@ -333,6 +386,9 @@ export default defineComponent({
       }
 
       if (confirm(`Naozaj chceš odísť zo servera "${serverName}"?`)) {
+        if (Array.isArray(this.selectedServer.members)) {
+          this.selectedServer.members = this.selectedServer.members.filter((m: string) => m !== currentNick);
+        }
         for (const channel of this.selectedServer.channels) {
           if (Array.isArray(channel.members)) {
             channel.members = channel.members.filter((m: string) => m !== currentNick);
@@ -343,12 +399,16 @@ export default defineComponent({
         }
         this.chatStore.saveServers();
 
-        const otherServer = this.chatStore.servers.find(s => s.id !== this.selectedServerId);
-        if (otherServer) {
-          this.chatStore.selectServer(otherServer.id);
-          const nextChannel = otherServer.channels[0]?.name || 'všeobecný';
+        const visibleServers = this.servers.filter(s => s.id !== this.selectedServerId);
+        const nextServ = visibleServers[0];
+        if (nextServ) {
+          this.chatStore.selectServer(nextServ.id);
+          const accessibleChannels = (nextServ.channels || []).filter((c: ChannelItem) => this.hasChannelAccess(c));
+          const nextChannel = accessibleChannels[0]?.name || nextServ.channels[0]?.name || 'všeobecný';
           await this.$router.push('/' + nextChannel);
           this.chatStore.addSystemMessage(nextChannel, `Opustil si server "${serverName}".`);
+        } else {
+          await this.$router.push('/');
         }
       }
     },

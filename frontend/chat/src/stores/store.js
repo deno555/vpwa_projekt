@@ -86,6 +86,7 @@ export const useAuthStore = defineStore('auth', {
  *   name: string,
  *   type: 'public' | 'private',
  *   admin: string,
+ *   members: string[],
  *   channels: Channel[]
  * }} Server
  */
@@ -115,6 +116,7 @@ const INITIAL_SERVERS = [
     name: 'Dev Tím',
     type: 'public',
     admin: 'denis',
+    members: ['denis', 'jakub'],
     channels: [
       { id: 1, name: 'všeobecný', type: 'public', admin: 'denis', members: ['denis', 'jakub'], invited: [], banned: [], kicks: {} },
       { id: 2, name: 'tajný-vývoj', type: 'private', admin: 'denis', members: ['denis'], invited: [], banned: [], kicks: {} },
@@ -127,6 +129,7 @@ const INITIAL_SERVERS = [
     name: 'Škola',
     type: 'public',
     admin: 'jakub',
+    members: ['denis', 'jakub'],
     channels: [
       { id: 5, name: 'oznamy', type: 'public', admin: 'jakub', members: ['denis', 'jakub'], invited: [], banned: [], kicks: {} },
       { id: 6, name: 'vpwa', type: 'public', admin: 'denis', members: ['denis', 'jakub'], invited: [], banned: [], kicks: {} },
@@ -138,6 +141,7 @@ const INITIAL_SERVERS = [
     name: 'Gaming',
     type: 'public',
     admin: 'denis',
+    members: ['denis', 'jakub'],
     channels: [
       { id: 8, name: 'lobby', type: 'public', admin: 'denis', members: ['denis', 'jakub'], invited: [], banned: [], kicks: {} },
       { id: 9, name: 'turnaj', type: 'public', admin: 'jakub', members: ['jakub'], invited: ['denis'], banned: [], kicks: {} },
@@ -149,9 +153,10 @@ const INITIAL_SERVERS = [
     name: 'Muzika',
     type: 'public',
     admin: 'denis',
+    members: ['denis'],
     channels: [
-      { id: 11, name: 'odporúčania', type: 'public', admin: 'denis', members: ['denis', 'jakub'], invited: [], banned: [], kicks: {} },
-      { id: 12, name: 'playlisty', type: 'public', admin: 'denis', members: ['denis', 'jakub'], invited: [], banned: [], kicks: {} },
+      { id: 11, name: 'odporúčania', type: 'public', admin: 'denis', members: ['denis'], invited: [], banned: [], kicks: {} },
+      { id: 12, name: 'playlisty', type: 'public', admin: 'denis', members: ['denis'], invited: [], banned: [], kicks: {} },
     ],
   },
   {
@@ -159,15 +164,37 @@ const INITIAL_SERVERS = [
     name: 'Anime Klub',
     type: 'public',
     admin: 'jakub',
+    members: ['jakub'],
     channels: [
-      { id: 13, name: 'diskusia', type: 'public', admin: 'jakub', members: ['denis', 'jakub'], invited: [], banned: [], kicks: {} },
+      { id: 13, name: 'diskusia', type: 'public', admin: 'jakub', members: ['jakub'], invited: [], banned: [], kicks: {} },
       { id: 14, name: 'spoilery', type: 'private', admin: 'jakub', members: ['jakub'], invited: [], banned: [], kicks: {} },
     ],
   },
 ]
 
+function loadStoredServers() {
+  const saved = localStorage.getItem('chatServers')
+  const version = localStorage.getItem('chatDataVersion')
+  const CURRENT_VERSION = '2'
+  if (!saved || version !== CURRENT_VERSION) {
+    localStorage.setItem('chatDataVersion', CURRENT_VERSION)
+    localStorage.setItem('chatServers', JSON.stringify(INITIAL_SERVERS))
+    return INITIAL_SERVERS
+  }
+  try {
+    const list = JSON.parse(saved)
+    for (const s of list) {
+      if (!Array.isArray(s.members)) {
+        s.members = [s.admin]
+      }
+    }
+    return list
+  } catch {
+    return INITIAL_SERVERS
+  }
+}
+
 const savedHistory = localStorage.getItem('chatHistory')
-const savedServers = localStorage.getItem('chatServers')
 const savedSelectedServerId = localStorage.getItem('chatSelectedServerId')
 
 let bc = null
@@ -186,12 +213,27 @@ export const useChatStore = defineStore('chat', {
     /** @type {Record<string, Record<string, number>>} */
     typingUsers: {},
     /** @type {Server[]} */
-    servers: savedServers ? JSON.parse(savedServers) : INITIAL_SERVERS,
+    servers: loadStoredServers(),
     selectedServerId: savedSelectedServerId ? Number(savedSelectedServerId) : INITIAL_SERVERS[0].id,
   }),
   getters: {
+    visibleServers: (state) => {
+      const auth = useAuthStore()
+      const currentUser = auth.currentUser
+      if (!currentUser) return []
+      return state.servers.filter((s) => {
+        return s.admin === currentUser || (Array.isArray(s.members) && s.members.includes(currentUser))
+      })
+    },
     currentServer: (state) => {
-      return state.servers.find((s) => s.id === state.selectedServerId) || state.servers[0] || INITIAL_SERVERS[0]
+      const auth = useAuthStore()
+      const currentUser = auth.currentUser
+      const accessible = state.servers.filter((s) => {
+        if (!currentUser) return true
+        return s.admin === currentUser || (Array.isArray(s.members) && s.members.includes(currentUser))
+      })
+      const found = accessible.find((s) => s.id === state.selectedServerId)
+      return found || accessible[0] || state.servers[0] || INITIAL_SERVERS[0]
     },
     currentChannels: (state) => {
       const server = state.servers.find((s) => s.id === state.selectedServerId) || state.servers[0]
@@ -207,9 +249,38 @@ export const useChatStore = defineStore('chat', {
         .filter(([, timestamp]) => now - timestamp < 3500)
         .map(([user]) => user)
     },
+    isServerMember: () => (server, username) => {
+      if (!server || !username) return false
+      return server.admin === username || (Array.isArray(server.members) && server.members.includes(username))
+    },
+    hasChannelAccess: () => (channel, username) => {
+      if (!channel || !username) return false
+      if (Array.isArray(channel.banned) && channel.banned.includes(username)) {
+        return false
+      }
+      if (channel.type === 'public') {
+        return true
+      }
+      return (
+        channel.admin === username ||
+        (Array.isArray(channel.members) && channel.members.includes(username)) ||
+        (Array.isArray(channel.invited) && channel.invited.includes(username))
+      )
+    },
     findChannelByName: (state) => (/** @type {string} */ channelName) => {
       const name = String(channelName || '').toLowerCase().replace(/^#/, '')
-      for (const server of state.servers) {
+      const auth = useAuthStore()
+      const currentUser = auth.currentUser
+      const accessible = state.servers.filter((s) => {
+        if (!currentUser) return true
+        return s.admin === currentUser || (Array.isArray(s.members) && s.members.includes(currentUser))
+      })
+      const curServer = accessible.find((s) => s.id === state.selectedServerId) || accessible[0]
+      if (curServer) {
+        const foundInCur = curServer.channels.find((c) => c.name.toLowerCase() === name)
+        if (foundInCur) return { channel: foundInCur, server: curServer }
+      }
+      for (const server of accessible) {
         const found = server.channels.find((c) => c.name.toLowerCase() === name)
         if (found) return { channel: found, server }
       }
@@ -395,6 +466,34 @@ export const useChatStore = defineStore('chat', {
     },
 
     /**
+     * @param {number} serverId
+     * @param {string} username
+     */
+    inviteUserToTeam(serverId, username) {
+      const server = this.servers.find((s) => s.id === serverId)
+      if (!server) return { success: false, message: 'Server neexistuje.' }
+      if (!Array.isArray(server.members)) server.members = []
+      if (!server.members.includes(username)) {
+        server.members.push(username)
+      }
+      const firstPub = server.channels.find((c) => c.type === 'public') || server.channels[0]
+      if (firstPub) {
+        if (!Array.isArray(firstPub.members)) firstPub.members = []
+        if (!firstPub.members.includes(username)) {
+          firstPub.members.push(username)
+        }
+      }
+      const auth = useAuthStore()
+      const currentUser = auth.currentUser || 'Používateľ'
+      this.addSystemMessage(
+        firstPub?.name || 'všeobecný',
+        `Používateľ ${currentUser} pridal používateľa ${username} do tímu "${server.name}".`
+      )
+      this.saveServers()
+      return { success: true, message: `Používateľ ${username} bol úspešne pridaný do tímu "${server.name}".` }
+    },
+
+    /**
      * Spracovanie príkazov z príkazového riadka
      * @param {string} currentChannelName
      * @param {string} commandLine
@@ -456,6 +555,11 @@ export const useChatStore = defineStore('chat', {
               this.addSystemMessage(existing.name, `Používateľ ${currentUser} sa pripojil do kanála #${existing.name}.`)
             }
 
+            if (!Array.isArray(server.members)) server.members = []
+            if (!server.members.includes(currentUser)) {
+              server.members.push(currentUser)
+            }
+
             this.saveServers()
             return {
               success: true,
@@ -478,6 +582,10 @@ export const useChatStore = defineStore('chat', {
           }
 
           server.channels.push(newChan)
+          if (!Array.isArray(server.members)) server.members = []
+          if (!server.members.includes(currentUser)) {
+            server.members.push(currentUser)
+          }
           this.saveServers()
           this.addSystemMessage(newChan.name, `Používateľ ${currentUser} vytvoril nový ${newChan.type === 'private' ? 'súkromný' : 'verejný'} kanál #${newChan.name}.`)
 
@@ -518,6 +626,7 @@ export const useChatStore = defineStore('chat', {
             name: serverName,
             type: isPrivate ? 'private' : 'public',
             admin: currentUser,
+            members: [currentUser],
             channels: [defaultChannel],
           }
 
@@ -549,8 +658,10 @@ export const useChatStore = defineStore('chat', {
             this.servers = [...INITIAL_SERVERS]
           }
 
-          this.selectedServerId = this.servers[0].id
-          const fallbackChannel = this.servers[0].channels[0]?.name || 'všeobecný'
+          const visible = this.visibleServers
+          const nextServer = visible[0] || this.servers[0]
+          this.selectedServerId = nextServer.id
+          const fallbackChannel = nextServer.channels[0]?.name || 'všeobecný'
           this.saveServers()
 
           return {
@@ -573,6 +684,12 @@ export const useChatStore = defineStore('chat', {
 
           if (!currentChannel) {
             return { success: false, message: 'Nie si v žiadnom kanáli.' }
+          }
+
+          // Používateľ je pridaný do zoznamu členov tímu (servera), aby videl tím
+          if (!Array.isArray(server.members)) server.members = []
+          if (!server.members.includes(targetNick)) {
+            server.members.push(targetNick)
           }
 
           // Ak je to súkromný kanál

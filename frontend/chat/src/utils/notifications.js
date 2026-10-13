@@ -56,21 +56,24 @@ export function isUserMentioned(text, username) {
  *
  * @param {string} channel
  * @param {{ id: number, author: string, text: string, time: string, isSystem?: boolean }} message
+ * @param {boolean} [mentioned] true, ak správa obsahuje @zmienku pre aktuálneho používateľa
  */
-export function triggerPing(channel, message) {
+export function triggerPing(channel, message, mentioned = false) {
 	if (message.isSystem) return;
 
 	// 1. Zvukové upozornenie
 	playPingSound();
 
-	// 2. Toast notifikácia v Quasar UI
+	// 2. Toast notifikácia v Quasar UI (@zmienka je zvýraznená inou farbou a ikonou)
 	try {
 		Notify.create({
-			type: 'warning',
-			color: 'amber-9',
-			textColor: 'black',
-			icon: 'alternate_email',
-			message: `${message.author} ťa označil v #${channel}`,
+			type: mentioned ? 'warning' : 'info',
+			color: mentioned ? 'amber-9' : 'primary',
+			textColor: mentioned ? 'black' : 'white',
+			icon: mentioned ? 'alternate_email' : 'chat',
+			message: mentioned
+				? `${message.author} ťa označil v #${channel}`
+				: `Nová správa od ${message.author} v #${channel}`,
 			caption: message.text.length > 80 ? message.text.slice(0, 80) + '...' : message.text,
 			position: 'top-right',
 			timeout: 4500,
@@ -82,7 +85,10 @@ export function triggerPing(channel, message) {
 	// 3. Natívna prehliadačová notifikácia (ak je povolená)
 	if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
 		try {
-			new Notification(`@${message.author} v #${channel}`, {
+			const title = mentioned
+				? `${message.author} ťa označil v #${channel}`
+				: `${message.author} v #${channel}`;
+			new Notification(title, {
 				body: message.text,
 				icon: '/favicon.ico',
 			});

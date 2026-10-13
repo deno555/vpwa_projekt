@@ -776,7 +776,7 @@ export const useChatStore = defineStore('chat', {
 				currentUser &&
 				isUserMentioned(msg.text, currentUser)
 			) {
-				triggerPing(channel, msg);
+				triggerPing(channel, msg, true);
 			}
 		},
 
@@ -1481,13 +1481,16 @@ if (bc) {
 			if (isOffline) return;
 			chatStore.applyNewMessage(data.channel, data.message);
 			const auth = useAuthStore();
-			// V stave "nerušiť" sa notifikácie nezobrazujú
+			const me = auth.currentUser;
+			// Notifikácia o každej novej správe v kanáloch, kde je používateľ členom
+			// (okrem vlastných správ). V stave "nerušiť" sa notifikácie nezobrazujú.
 			if (
 				chatStore.currentUserStatus === 'online' &&
-				auth.currentUser &&
-				isUserMentioned(data.message.text, auth.currentUser)
+				me &&
+				!isSameUser(data.message.author, me) &&
+				chatStore.isMember(data.channel, me)
 			) {
-				triggerPing(data.channel, data.message);
+				triggerPing(data.channel, data.message, isUserMentioned(data.message.text, me));
 			}
 		} else if (data.type === 'servers_updated') {
 			chatStore.servers = data.servers;

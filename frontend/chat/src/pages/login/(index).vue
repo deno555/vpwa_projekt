@@ -114,7 +114,7 @@
 <script lang="ts">
 import { defineComponent } from 'vue';
 import { mapStores } from 'pinia';
-import { useAuthStore } from '@/stores/store';
+import { useAuthStore, useChatStore } from '@/stores/store';
 
 export default defineComponent({
 	name: 'LoginPage',
@@ -130,7 +130,7 @@ export default defineComponent({
 	},
 
 	computed: {
-		...mapStores(useAuthStore),
+		...mapStores(useAuthStore, useChatStore),
 	},
 
 	methods: {
@@ -143,6 +143,8 @@ export default defineComponent({
 			this.loading = false;
 
 			if (ok) {
+				// Po odhlásení ostal uložený stav offline, po prihlásení je používateľ znova online
+				this.chatStore.setUserStatus(this.authStore.currentUser || '', 'online');
 				await this.$router.push('/');
 			} else {
 				this.error = 'Nesprávne používateľské meno alebo heslo.';

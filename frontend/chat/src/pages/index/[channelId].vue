@@ -584,7 +584,7 @@ export default defineComponent({
 	data() {
 		return {
 			newMessage: '',
-			typingTimer: null as ReturnType<typeof setTimeout> | null,
+			typingHeartbeat: null as ReturnType<typeof setInterval> | null,
 			cleanupInterval: null as ReturnType<typeof setInterval> | null,
 			ticker: 0,
 			notificationsEnabled: false,
@@ -803,18 +803,26 @@ export default defineComponent({
 			const currentUser = this.authStore.currentUser || 'Používateľ';
 			this.chatStore.setTyping(this.channelName, currentUser, true, text);
 
-			if (this.typingTimer) {
-				clearTimeout(this.typingTimer);
+			// Rozpísaný text ostáva viditeľný, kým input nie je prázdny alebo sa správa neodošle.
+			// Heartbeat obnovuje stav, aby ho ostatní nezahodili ako expirovaný (3,5 s v store),
+			// a zároveň po zavretí tabu náhľad sám zmizne.
+			if (!this.typingHeartbeat) {
+				this.typingHeartbeat = setInterval(() => {
+					const draft = this.newMessage;
+					if (draft.trim().length === 0 || draft.startsWith('/')) {
+						this.stopTyping();
+						return;
+					}
+					const user = this.authStore.currentUser || 'Používateľ';
+					this.chatStore.setTyping(this.channelName, user, true, draft);
+				}, 2000);
 			}
-			this.typingTimer = setTimeout(() => {
-				this.stopTyping();
-			}, 2500);
 		},
 
 		stopTyping() {
-			if (this.typingTimer) {
-				clearTimeout(this.typingTimer);
-				this.typingTimer = null;
+			if (this.typingHeartbeat) {
+				clearInterval(this.typingHeartbeat);
+				this.typingHeartbeat = null;
 			}
 			const currentUser = this.authStore.currentUser || 'Používateľ';
 			this.chatStore.setTyping(this.channelName, currentUser, false);

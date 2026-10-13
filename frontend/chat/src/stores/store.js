@@ -486,6 +486,8 @@ export const useChatStore = defineStore('chat', {
 			const now = Date.now();
 			return Object.entries(channelMap)
 				.filter(([, timestamp]) => now - timestamp < 3500)
+				// Offline používateľ sa v "is typing" nezobrazuje
+				.filter(([user]) => (state.userStatuses[statusKey(user)] || 'offline') !== 'offline')
 				.map(([user]) => user);
 		},
 		typingTextOf: (state) => (/** @type {string} */ channel, /** @type {string} */ username) =>
@@ -627,6 +629,24 @@ export const useChatStore = defineStore('chat', {
 			const prev = this.userStatuses[key];
 			this.userStatuses = { ...this.userStatuses, [key]: status };
 
+			// Pri prechode do offline zrušíme jeho typing vo všetkých kanáloch
+			if (status === 'offline') {
+				for (const channel of Object.keys(this.typingUsers)) {
+					if (Object.keys(this.typingUsers[channel] || {}).some((u) => isSameUser(u, username))) {
+						const updated = { ...this.typingUsers[channel] };
+						const updatedTexts = { ...this.typingTexts[channel] };
+						for (const u of Object.keys(updated)) {
+							if (isSameUser(u, username)) {
+								delete updated[u];
+								delete updatedTexts[u];
+							}
+						}
+						this.typingUsers[channel] = updated;
+						this.typingTexts[channel] = updatedTexts;
+					}
+				}
+			}
+
 			// Po návrate z offline načítame, čo medzitým pribudlo
 			const auth = useAuthStore();
 			if (prev === 'offline' && status !== 'offline' && isSameUser(username, auth.currentUser)) {
@@ -676,6 +696,8 @@ export const useChatStore = defineStore('chat', {
 		 * @param {string} [text] rozpísaný text (náhľad pre ostatných)
 		 */
 		setTyping(channel, username, isTyping, text = '') {
+			// Offline používateľ typing nevysiela
+			if (isTyping && this.statusOf(username) === 'offline') isTyping = false;
 			const time = Date.now();
 			this.applyTyping(channel, username, isTyping, time, text);
 
@@ -1476,6 +1498,7 @@ if (bc) {
 		const isOffline = chatStore.currentUserStatus === 'offline';
 		if (data.type === 'typing') {
 			if (isOffline) return;
+			if (data.isTyping && chatStore.statusOf(data.username) === 'offline') return;
 			chatStore.applyTyping(data.channel, data.username, data.isTyping, data.time, data.text);
 		} else if (data.type === 'new_message') {
 			if (isOffline) return;

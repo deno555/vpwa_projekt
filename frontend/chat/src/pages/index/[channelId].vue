@@ -93,12 +93,12 @@
 		<!-- Unauthorized / Access Denied -->
 		<div
 			v-if="!hasAccess"
-			class="col flex flex-center bg-discord-main text-white q-pa-xl text-center"
+			class="col flex flex-center bg-discord-main text-white q-pa-md text-center"
 		>
-			<div class="column items-center" style="max-width: 480px">
-				<q-avatar size="80px" color="red-10" text-color="red-2" icon="lock" class="q-mb-md" />
-				<div class="text-h5 text-weight-bold q-mb-sm">Prístup do kanála je obmedzený</div>
-				<div class="text-grey-5 q-mb-lg">
+			<div class="column items-center q-pa-sm" style="max-width: 480px">
+				<q-avatar size="64px" color="red-10" text-color="red-2" icon="lock" class="q-mb-md" />
+				<div class="text-h6 text-sm-h5 text-weight-bold q-mb-sm">Prístup do kanála je obmedzený</div>
+				<div class="text-grey-5 q-mb-md text-body2">
 					Kanál <strong>#{{ channelName }}</strong> je súkromný alebo k nemu nemáš prístup. Nemáš
 					oprávnenie na zobrazenie správ ani na odosielanie obsahu. Prístup ti môže udeliť iba
 					správca kanála pozvánkou.
@@ -153,18 +153,18 @@
 					<!-- Chat Messages Area -->
 					<q-scroll-area ref="chatScroll" class="col q-pa-md bg-discord-main chat-scroll-content">
 						<div class="column justify-end" style="min-height: 100%">
-							<div class="text-center q-my-xl">
+							<div class="text-center channel-welcome-banner q-my-md q-my-sm-xl">
 								<q-avatar
-									size="72px"
+									size="56px"
 									color="grey-8"
 									text-color="white"
 									:icon="currentChannel?.type === 'private' ? 'lock' : 'tag'"
-									class="q-mb-md"
+									class="q-mb-sm channel-welcome-avatar"
 								/>
-								<div class="text-h4 text-weight-bold text-white q-mb-sm">
+								<div class="text-h5 text-sm-h4 text-weight-bold text-white q-mb-xs">
 									Vitaj v #{{ channelName }}!
 								</div>
-								<div class="text-grey-5">
+								<div class="text-grey-5 text-caption text-sm-body2">
 									Toto je začiatok histórie tohto kanála. Príkazy zadávaj cez príkazový riadok dole.
 								</div>
 							</div>
@@ -240,9 +240,9 @@
 						<!-- Quick mention helper chips if user is typing '@' -->
 						<div
 							v-if="mentionSuggestions.length > 0"
-							class="row items-center q-gutter-xs q-mb-xs q-px-xs"
+							class="mention-chips-bar row no-wrap items-center q-gutter-xs q-mb-xs q-px-xs"
 						>
-							<span class="text-caption text-grey-5 q-mr-xs">Označiť:</span>
+							<span class="text-caption text-grey-5 q-mr-xs flex-shrink-0">Označiť:</span>
 							<q-chip
 								v-for="user in mentionSuggestions"
 								:key="user"
@@ -291,12 +291,12 @@
 									@click="sendMessage"
 									title="Odoslať správu / príkaz"
 								/>
-								<q-btn flat round dense icon="emoji_emotions" color="grey-5" />
+								<q-btn flat round dense icon="emoji_emotions" color="grey-5" class="gt-xs" />
 							</template>
 						</q-input>
 
 						<!-- Typing indicator -->
-						<div class="typing-bar row items-center q-px-xs">
+						<div class="typing-bar row items-center no-wrap ellipsis q-px-xs">
 							<transition name="typing-fade">
 								<div v-if="typingText" class="row items-center text-caption text-grey-4">
 									<span class="typing-dots q-mr-xs">
@@ -346,7 +346,12 @@
 				</div>
 
 				<!-- Náhľad rozpísaného textu (živý) -->
-				<q-dialog v-model="typingPreviewOpen" @hide="typingPreviewUser = ''">
+				<q-dialog
+					v-model="typingPreviewOpen"
+					transition-show="scale"
+					transition-hide="scale"
+					@hide="typingPreviewUser = ''"
+				>
 					<q-card dark class="typing-preview-card text-white">
 						<q-card-section class="row items-center no-wrap q-pb-sm">
 							<div class="avatar-wrapper q-mr-sm">
@@ -1231,6 +1236,29 @@ export default defineComponent({
 	}
 	.msg-avatar {
 		margin-right: 10px !important;
+	}
+}
+
+.mention-chips-bar {
+	overflow-x: auto;
+	white-space: nowrap;
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+
+.mention-chips-bar::-webkit-scrollbar {
+	display: none;
+}
+
+.flex-shrink-0 {
+	flex-shrink: 0;
+}
+
+@media (min-width: 600px) {
+	.channel-welcome-avatar {
+		width: 72px !important;
+		height: 72px !important;
+		font-size: 72px !important;
 	}
 }
 </style>

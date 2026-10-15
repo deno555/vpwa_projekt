@@ -396,7 +396,13 @@ import { STATUS_OPTIONS, useAuthStore, useChatStore } from '@/stores/store';
 // --- Quasar dialógy namiesto alert / confirm / prompt ---
 function showAlert(message: string, title = 'Upozornenie'): Promise<void> {
 	return new Promise((resolve) => {
-		Dialog.create({ title, message, dark: true, ok: { label: 'OK', color: 'primary', flat: true } })
+		Dialog.create({
+			title,
+			message,
+			dark: true,
+			style: 'min-width: 280px; max-width: 94vw;',
+			ok: { label: 'OK', color: 'primary', flat: true },
+		})
 			.onOk(() => resolve())
 			.onDismiss(() => resolve());
 	});
@@ -410,6 +416,7 @@ function showConfirm(message: string, title = 'Potvrdenie'): Promise<boolean> {
 			message,
 			dark: true,
 			persistent: true,
+			style: 'min-width: 280px; max-width: 94vw;',
 			ok: { label: 'Áno', color: 'negative', flat: true },
 			cancel: { label: 'Zrušiť', color: 'grey', flat: true },
 		})
@@ -427,6 +434,7 @@ function showPrompt(message: string, title = 'Zadaj hodnotu'): Promise<string | 
 			title,
 			message,
 			dark: true,
+			style: 'min-width: 280px; max-width: 94vw;',
 			prompt: { model: '', type: 'text', isValid: (val: string) => val.trim().length > 0 },
 			ok: { label: 'OK', color: 'primary', flat: true },
 			cancel: { label: 'Zrušiť', color: 'grey', flat: true },
@@ -444,6 +452,7 @@ function showVisibilityPicker(title: string): Promise<'public' | 'private' | nul
 		Dialog.create({
 			title,
 			dark: true,
+			style: 'min-width: 280px; max-width: 94vw;',
 			options: {
 				type: 'radio',
 				model: 'public',

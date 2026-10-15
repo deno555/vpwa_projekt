@@ -122,3 +122,15 @@ body {
 		color: #5865f2;
 	}
 }
+
+// Responzívne prispôsobenie prihlasovacej a registračnej karty na malých mobiloch
+@media (max-width: 479px) {
+	.discord-auth-bg {
+		padding: 16px 10px;
+	}
+
+	.discord-card {
+		padding: 20px 14px !important;
+		border-radius: 10px !important;
+	}
+}

@@ -200,7 +200,7 @@
 									/>
 								</div>
 								<div class="col" style="min-width: 0">
-									<div class="flex items-center q-mb-xs">
+									<div class="flex items-center flex-wrap q-mb-xs">
 										<span
 											class="text-weight-bold q-mr-sm author-name"
 											:class="
@@ -268,6 +268,7 @@
 							:placeholder="inputPlaceholder"
 							class="full-width"
 							@keyup.enter="sendMessage"
+							@focus="scrollToBottom(true)"
 							@update:model-value="onInputUpdate"
 						>
 							<template #prepend>
@@ -1029,6 +1030,7 @@ export default defineComponent({
 
 .msg-content {
 	word-break: break-word;
+	overflow-wrap: anywhere;
 	white-space: pre-line;
 	line-height: 1.45;
 }
@@ -1236,6 +1238,14 @@ export default defineComponent({
 	}
 	.msg-avatar {
 		margin-right: 10px !important;
+	}
+	.msg-avatar .q-avatar {
+		width: 34px !important;
+		height: 34px !important;
+		font-size: 34px !important;
+	}
+	.msg-row {
+		padding: 3px 4px !important;
 	}
 }
 

@@ -1,7 +1,7 @@
 <template>
 	<q-layout view="lHh Lpr lFf" class="discord-bg text-white">
 		<!-- Combined Left Sidebar (Servers + Channels) -->
-		<q-drawer v-model="leftDrawerOpen" show-if-above :width="312" :breakpoint="768">
+		<q-drawer v-model="leftDrawerOpen" show-if-above :width="drawerWidth" :breakpoint="768">
 			<div class="column no-wrap fit">
 				<div class="row no-wrap col" style="min-height: 0">
 					<!-- Servers Column (72px) -->
@@ -90,6 +90,7 @@
 								self="top left"
 								:offset="[0, 4]"
 								class="discord-bg text-white"
+								max-width="90vw"
 							>
 								<q-list dense style="min-width: 190px">
 									<q-item
@@ -319,7 +320,7 @@
 							</div>
 						</div>
 
-						<q-menu anchor="top left" self="bottom left" :offset="[0, 8]" class="status-menu">
+						<q-menu anchor="top left" self="bottom left" :offset="[0, 8]" class="status-menu" max-width="90vw">
 							<q-list dense style="min-width: 180px">
 								<q-item
 									v-for="option in statusOptions"
@@ -366,6 +367,7 @@
 							self="bottom right"
 							:offset="[0, 8]"
 							class="discord-bg text-white"
+							max-width="90vw"
 						>
 							<q-list dense style="min-width: 150px">
 								<q-item clickable v-close-popup @click="logout" class="text-red-4 hover-bg-grey-9">
@@ -520,6 +522,10 @@ export default defineComponent({
 
 	computed: {
 		...mapStores(useAuthStore, useChatStore),
+
+		drawerWidth(): number {
+			return Math.min(312, this.$q.screen.width);
+		},
 
 		leftDrawerOpen: {
 			get(): boolean {
@@ -940,7 +946,7 @@ export default defineComponent({
 	background-color: rgba(88, 101, 242, 0.25);
 }
 
-/* Channel Actions (Hide by default, show on hover) */
+/* Channel Actions (Hide by default, show on hover or always on touchscreens) */
 .channel-actions {
 	opacity: 0;
 	transition: opacity 0.1s;
@@ -948,6 +954,16 @@ export default defineComponent({
 
 .channel-item:hover .channel-actions {
 	opacity: 1;
+}
+
+@media (max-width: 768px), (hover: none) {
+	.channel-actions {
+		opacity: 0.85;
+	}
+
+	.add-btn {
+		opacity: 1;
+	}
 }
 
 /* Add Channel Button */

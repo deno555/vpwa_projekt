@@ -1,7 +1,7 @@
 <template>
 	<q-layout view="lHh Lpr lFf" class="discord-bg text-white">
 		<!-- Combined Left Sidebar (Servers + Channels) -->
-		<q-drawer v-model="leftDrawerOpen" show-if-above :width="312" :breakpoint="500">
+		<q-drawer v-model="leftDrawerOpen" show-if-above :width="312" :breakpoint="768">
 			<div class="column no-wrap fit">
 				<div class="row no-wrap col" style="min-height: 0">
 					<!-- Servers Column (72px) -->
@@ -70,7 +70,20 @@
 									👑 VLASTNÍK
 								</q-badge>
 							</div>
-							<q-icon name="expand_more" size="sm" />
+							<div class="row items-center no-wrap">
+								<q-icon name="expand_more" size="sm" class="q-mr-xs" />
+								<q-btn
+									flat
+									round
+									dense
+									icon="close"
+									size="xs"
+									color="grey-5"
+									class="lt-md"
+									title="Zavrieť panel"
+									@click.stop="chatStore.setLeftDrawer(false)"
+								/>
+							</div>
 
 							<q-menu
 								anchor="bottom left"
@@ -156,6 +169,7 @@
 											v-ripple
 											:to="'/' + channel.name"
 											exact
+											@click="onChannelClick"
 											class="channel-item invite-highlight q-mt-xs rounded-borders"
 											active-class="text-white bg-grey-9"
 										>
@@ -203,6 +217,7 @@
 										v-ripple
 										:to="'/' + channel.name"
 										exact
+										@click="onChannelClick"
 										class="channel-item q-mb-xs rounded-borders text-grey-5"
 										active-class="text-white bg-grey-9"
 									>
@@ -482,7 +497,6 @@ export default defineComponent({
 
 	data() {
 		return {
-			leftDrawerOpen: true,
 			statusOptions: STATUS_OPTIONS,
 		};
 	},
@@ -497,6 +511,15 @@ export default defineComponent({
 
 	computed: {
 		...mapStores(useAuthStore, useChatStore),
+
+		leftDrawerOpen: {
+			get(): boolean {
+				return this.chatStore.leftDrawerOpen;
+			},
+			set(val: boolean) {
+				this.chatStore.setLeftDrawer(val);
+			},
+		},
 
 		currentStatus(): StatusOption {
 			const status = this.chatStore.currentUserStatus;
@@ -579,6 +602,12 @@ export default defineComponent({
 	},
 
 	methods: {
+		onChannelClick() {
+			if (this.$q.screen.lt.md) {
+				this.chatStore.setLeftDrawer(false);
+			}
+		},
+
 		setStatus(status: UserStatus) {
 			this.chatStore.setUserStatus(this.currentUsername, status);
 		},
@@ -597,6 +626,9 @@ export default defineComponent({
 
 		async selectServer(id: number) {
 			this.chatStore.selectServer(id);
+			if (this.$q.screen.lt.md) {
+				this.chatStore.setLeftDrawer(false);
+			}
 			const server = this.chatStore.servers.find((s) => s.id === id);
 			const currentNick = this.authStore.currentUser || '';
 			const memberChannels = (server?.channels || []).filter(

@@ -447,6 +447,8 @@ export const useChatStore = defineStore('chat', {
 		selectedServerId: savedSelectedServerId ? Number(savedSelectedServerId) : INITIAL_SERVERS[0].id,
 		/** @type {Record<string, UserStatus>} */
 		userStatuses: loadStoredStatuses(),
+		/** @type {boolean} */
+		leftDrawerOpen: typeof window !== 'undefined' ? window.innerWidth >= 768 : true,
 	}),
 	getters: {
 		statusOf: (state) => (/** @type {string} */ username) =>
@@ -604,6 +606,17 @@ export const useChatStore = defineStore('chat', {
 		selectServer(serverId) {
 			this.selectedServerId = serverId;
 			this.saveServers();
+		},
+
+		toggleLeftDrawer() {
+			this.leftDrawerOpen = !this.leftDrawerOpen;
+		},
+
+		/**
+		 * @param {boolean} open
+		 */
+		setLeftDrawer(open) {
+			this.leftDrawerOpen = Boolean(open);
 		},
 
 		/**

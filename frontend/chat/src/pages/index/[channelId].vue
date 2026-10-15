@@ -2,22 +2,32 @@
 	<q-page class="column no-wrap" style="height: 100vh">
 		<!-- Channel Header -->
 		<q-toolbar class="bg-grey-10 text-white" style="border-bottom: 1px solid #1e1f22">
+			<q-btn
+				flat
+				round
+				dense
+				icon="menu"
+				color="white"
+				class="q-mr-xs lt-md"
+				title="Otvoriť kanály a servery"
+				@click="chatStore.toggleLeftDrawer"
+			/>
 			<q-icon
 				:name="currentChannel?.type === 'private' ? 'lock' : 'tag'"
 				size="sm"
 				color="grey-5"
 				class="q-mr-sm"
 			/>
-			<q-toolbar-title class="text-weight-bold row items-center" style="font-size: 1rem">
-				<span>#{{ channelName }}</span>
+			<q-toolbar-title class="text-weight-bold row items-center no-wrap ellipsis" style="font-size: 1rem">
+				<span class="ellipsis">#{{ channelName }}</span>
 				<q-badge
 					v-if="currentChannel"
 					:color="currentChannel.type === 'private' ? 'deep-purple' : 'primary'"
-					class="q-ml-sm text-caption"
+					class="q-ml-sm text-caption gt-xs"
 				>
 					{{ currentChannel.type === 'private' ? 'Súkromný' : 'Verejný' }}
 				</q-badge>
-				<span v-if="currentChannel" class="text-caption text-grey-5 q-ml-md gt-xs row items-center">
+				<span v-if="currentChannel" class="text-caption text-grey-5 q-ml-md gt-sm row items-center">
 					Správca kanála: <span class="text-grey-3 q-mx-xs">{{ currentChannel.admin }}</span>
 					<q-badge
 						v-if="isChannelAdmin"
@@ -28,7 +38,7 @@
 						Vy
 					</q-badge>
 				</span>
-				<span v-if="currentServer" class="text-caption text-grey-5 q-ml-md gt-xs row items-center">
+				<span v-if="currentServer" class="text-caption text-grey-5 q-ml-md gt-sm row items-center">
 					Vlastník servera: <span class="text-grey-3 q-mx-xs">{{ currentServer.admin }}</span>
 					<q-badge
 						v-if="isServerOwner"
@@ -49,7 +59,7 @@
 				dense
 				icon="terminal"
 				color="amber-5"
-				class="q-mr-sm"
+				class="q-mr-xs"
 				title="Príkazy terminálu (/help)"
 				@click="showHelp"
 			/>
@@ -59,7 +69,7 @@
 				dense
 				:icon="notificationsEnabled ? 'notifications_active' : 'notifications'"
 				:color="notificationsEnabled ? 'amber-5' : 'grey-5'"
-				class="q-mr-sm"
+				class="q-mr-xs"
 				:title="
 					notificationsEnabled
 						? 'Desktop notifikácie sú aktívne'
@@ -67,7 +77,7 @@
 				"
 				@click="toggleDesktopNotifications"
 			/>
-			<q-btn flat round dense icon="push_pin" color="grey-5" class="q-mr-sm" />
+			<q-btn flat round dense icon="push_pin" color="grey-5" class="q-mr-xs gt-xs" />
 			<q-btn
 				flat
 				round
@@ -137,11 +147,11 @@
 			</div>
 
 			<!-- Main Chat Body with Optional Members Sidebar -->
-			<div class="row no-wrap col" style="min-height: 0">
+			<div class="row no-wrap col relative-position" style="min-height: 0">
 				<!-- Left: Chat Messages Area + Input Area -->
 				<div class="column col" style="min-height: 0">
 					<!-- Chat Messages Area -->
-					<q-scroll-area ref="chatScroll" class="col q-pa-md bg-discord-main">
+					<q-scroll-area ref="chatScroll" class="col q-pa-md bg-discord-main chat-scroll-content">
 						<div class="column justify-end" style="min-height: 100%">
 							<div class="text-center q-my-xl">
 								<q-avatar
@@ -226,7 +236,7 @@
 					</q-scroll-area>
 
 					<!-- Message Input Area (Príkazový riadok) -->
-					<div class="bg-discord-main q-px-md q-pt-xs q-pb-sm">
+					<div class="bg-discord-main q-px-md q-pt-xs q-pb-sm chat-input-container">
 						<!-- Quick mention helper chips if user is typing '@' -->
 						<div
 							v-if="mentionSuggestions.length > 0"
@@ -366,6 +376,13 @@
 						</q-card-section>
 					</q-card>
 				</q-dialog>
+
+				<!-- Members backdrop on mobile -->
+				<div
+					v-if="showMembers"
+					class="members-backdrop lt-md"
+					@click="showMembers = false"
+				/>
 
 				<!-- Right: Members Sidebar (Toggleable via people_alt or /list) -->
 				<div
@@ -923,6 +940,9 @@ export default defineComponent({
 			if (!author || author === 'Systém') return;
 			const current = this.newMessage ? this.newMessage.trim() + ' ' : '';
 			this.newMessage = `${current}@${author} `;
+			if (this.$q.screen.lt.md) {
+				this.showMembers = false;
+			}
 		},
 
 		applyMentionSuggestion(user: string) {
@@ -1176,5 +1196,41 @@ export default defineComponent({
 
 .msg-row:hover .status-dot--msg {
 	border-color: #2b2d31;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 767px) {
+	.members-sidebar {
+		position: absolute !important;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		height: 100% !important;
+		z-index: 50;
+		max-width: 85vw;
+		box-shadow: -4px 0 20px rgba(0, 0, 0, 0.5);
+	}
+
+	.members-backdrop {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background-color: rgba(0, 0, 0, 0.6);
+		z-index: 45;
+	}
+}
+
+@media (max-width: 599px) {
+	.chat-scroll-content {
+		padding: 10px 8px !important;
+	}
+	.chat-input-container {
+		padding: 6px 8px !important;
+	}
+	.msg-avatar {
+		margin-right: 10px !important;
+	}
 }
 </style>

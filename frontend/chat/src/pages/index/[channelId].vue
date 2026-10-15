@@ -947,7 +947,11 @@ export default defineComponent({
 
 		statusOption(username: string): { value: string; label: string; color: string } {
 			const status = this.chatStore.statusOf(username);
-			return STATUS_OPTIONS.find((o) => o.value === status) ?? STATUS_OPTIONS[2]!;
+			return (
+				STATUS_OPTIONS.find((o) => o.value === status) ??
+				STATUS_OPTIONS.find((o) => o.value === 'offline') ??
+				STATUS_OPTIONS[0]!
+			);
 		},
 	},
 });

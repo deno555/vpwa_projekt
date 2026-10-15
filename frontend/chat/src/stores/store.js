@@ -30,13 +30,19 @@ export function userListIncludes(list, user) {
 
 // --- Stav používateľa ---
 
-/** @typedef {'online' | 'dnd' | 'offline'} UserStatus */
+/** @typedef {'online' | 'mentions' | 'dnd' | 'offline'} UserStatus */
 
-/** @type {{ value: UserStatus, label: string, color: string }[]} */
+/** @type {{ value: UserStatus, label: string, color: string, description?: string }[]} */
 export const STATUS_OPTIONS = [
-	{ value: 'online', label: 'Online', color: '#23a55a' },
-	{ value: 'dnd', label: 'Nerušiť', color: '#f23f43' },
-	{ value: 'offline', label: 'Offline', color: '#80848e' },
+	{ value: 'online', label: 'Online', color: '#23a55a', description: 'Všetky upozornenia' },
+	{
+		value: 'mentions',
+		label: 'Iba označenia',
+		color: '#faa61a',
+		description: 'Upozornenia iba pri @označení',
+	},
+	{ value: 'dnd', label: 'Nerušiť', color: '#f23f43', description: 'Žiadne upozornenia' },
+	{ value: 'offline', label: 'Offline', color: '#80848e', description: 'Správy neprichádzajú' },
 ];
 
 function statusKey(username) {
@@ -794,7 +800,7 @@ export const useChatStore = defineStore('chat', {
 
 			// Ak správa obsahuje @zmienku pre odosielateľa (napr. testovanie pingu samého seba)
 			if (
-				this.currentUserStatus === 'online' &&
+				(this.currentUserStatus === 'online' || this.currentUserStatus === 'mentions') &&
 				currentUser &&
 				isUserMentioned(msg.text, currentUser)
 			) {
@@ -1505,15 +1511,21 @@ if (bc) {
 			chatStore.applyNewMessage(data.channel, data.message);
 			const auth = useAuthStore();
 			const me = auth.currentUser;
-			// Notifikácia o každej novej správe v kanáloch, kde je používateľ členom
-			// (okrem vlastných správ). V stave "nerušiť" sa notifikácie nezobrazujú.
+			// Notifikácia o novej správe v kanáloch, kde je používateľ členom (okrem vlastných správ):
+			// - v stave "online" prichádza notifikácia na každú správu
+			// - v stave "mentions" (Iba označenia) prichádza notifikácia iba keď je používateľ označený
+			// - v stave "nerušiť" (dnd) sa notifikácie nezobrazujú
 			if (
-				chatStore.currentUserStatus === 'online' &&
 				me &&
 				!isSameUser(data.message.author, me) &&
 				chatStore.isMember(data.channel, me)
 			) {
-				triggerPing(data.channel, data.message, isUserMentioned(data.message.text, me));
+				const isMentioned = isUserMentioned(data.message.text, me);
+				if (chatStore.currentUserStatus === 'online') {
+					triggerPing(data.channel, data.message, isMentioned);
+				} else if (chatStore.currentUserStatus === 'mentions' && isMentioned) {
+					triggerPing(data.channel, data.message, true);
+				}
 			}
 		} else if (data.type === 'servers_updated') {
 			chatStore.servers = data.servers;

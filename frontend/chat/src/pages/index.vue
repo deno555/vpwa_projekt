@@ -321,7 +321,17 @@
 											:style="{ backgroundColor: option.color }"
 										/>
 									</q-item-section>
-									<q-item-section>{{ option.label }}</q-item-section>
+									<q-item-section>
+										<q-item-label>{{ option.label }}</q-item-label>
+										<q-item-label
+											v-if="option.description"
+											caption
+											class="text-grey-5"
+											style="font-size: 11px; line-height: 1.1"
+										>
+											{{ option.description }}
+										</q-item-label>
+									</q-item-section>
 								</q-item>
 							</q-list>
 						</q-menu>
@@ -438,12 +448,13 @@ function showVisibilityPicker(title: string): Promise<'public' | 'private' | nul
 }
 
 // --- Stav používateľa ---
-type UserStatus = 'online' | 'dnd' | 'offline';
+type UserStatus = 'online' | 'mentions' | 'dnd' | 'offline';
 
 interface StatusOption {
 	value: UserStatus;
 	label: string;
 	color: string;
+	description?: string;
 }
 
 interface ChannelItem {

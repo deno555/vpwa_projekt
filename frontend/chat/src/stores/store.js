@@ -142,7 +142,8 @@ export const useAuthStore = defineStore('auth', {
  *   members: string[],
  *   invited: string[],
  *   banned: string[],
- *   kicks: Record<string, string[]>
+ *   kicks: Record<string, string[]>,
+ *   lastActivity?: number
  * }} Channel
  * @typedef {{
  *   id: number,
@@ -153,6 +154,9 @@ export const useAuthStore = defineStore('auth', {
  *   channels: Channel[]
  * }} Server
  */
+
+// Kanál bez novej správy dlhšie ako 30 dní zaniká
+export const CHANNEL_INACTIVITY_LIMIT_MS = 30 * 24 * 60 * 60 * 1000;
 
 function currentTime() {
 	return new Date().toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' });
@@ -449,6 +453,8 @@ export const useChatStore = defineStore('chat', {
 		userStatuses: loadStoredStatuses(),
 		/** @type {boolean} */
 		leftDrawerOpen: typeof window !== 'undefined' ? window.innerWidth >= 768 : true,
+		/** @type {string[]} názvy kanálov, ktoré naposledy zanikli pre neaktivitu */
+		lastExpiredChannels: [],
 	}),
 	getters: {
 		statusOf: (state) => (/** @type {string} */ username) =>
@@ -679,6 +685,86 @@ export const useChatStore = defineStore('chat', {
 		},
 
 		/**
+		 * Zaznamená novú správu v kanáli (posúva hranicu 30-dňovej neaktivity).
+		 * Ukladá iba kanály, nie vybraný server, aby sa iným kartám neprepol server.
+		 * @param {string} channelName
+		 */
+		touchChannel(channelName) {
+			const info = this.findChannelByName(channelName);
+			if (!info) return;
+			info.channel.lastActivity = Date.now();
+			localStorage.setItem('chatServers', JSON.stringify(this.servers));
+		},
+
+		/**
+		 * Zruší kanály bez novej správy dlhšie ako 30 dní, aby sa ich channelName dal znova použiť.
+		 * @returns {string[]} názvy zaniknutých kanálov
+		 */
+		removeExpiredChannels(now = Date.now()) {
+			const limit = now - CHANNEL_INACTIVITY_LIMIT_MS;
+			/** @type {string[]} */
+			const expired = [];
+			let changed = false;
+
+			for (const server of this.servers) {
+				const kept = [];
+				for (const channel of server.channels) {
+					// Kanály bez záznamu aktivity (staršie dáta) začínajú plynúť od teraz
+					if (typeof channel.lastActivity !== 'number') {
+						channel.lastActivity = now;
+						changed = true;
+					}
+					if (channel.lastActivity < limit) {
+						expired.push(channel.name);
+					} else {
+						kept.push(channel);
+					}
+				}
+				if (kept.length !== server.channels.length) {
+					server.channels = kept;
+				}
+			}
+
+			if (expired.length === 0) {
+				if (changed) localStorage.setItem('chatServers', JSON.stringify(this.servers));
+				return expired;
+			}
+
+			localStorage.setItem('chatServers', JSON.stringify(this.servers));
+			this.applyExpiredChannels(expired);
+			if (bc) {
+				try {
+					bc.postMessage({ type: 'channels_expired', names: expired });
+				} catch {
+					// ignore
+				}
+			}
+			return expired;
+		},
+
+		/**
+		 * Odstráni históriu zaniknutých kanálov (aj z localStorage, inak by ju persistHistory vrátil).
+		 * @param {string[]} names
+		 */
+		applyExpiredChannels(names) {
+			// História je kľúčovaná názvom - nemažeme ju, ak kanál s rovnakým menom ešte existuje
+			const stillUsed = new Set(
+				this.servers.flatMap((s) => s.channels.map((c) => c.name.toLowerCase())),
+			);
+			const toDelete = names.filter((n) => !stillUsed.has(n.toLowerCase()));
+
+			const history = { ...this.history };
+			const stored = loadStoredHistory();
+			for (const name of toDelete) {
+				delete history[name];
+				delete stored[name];
+			}
+			this.history = history;
+			localStorage.setItem('chatHistory', JSON.stringify(stored));
+			this.lastExpiredChannels = names;
+		},
+
+		/**
 		 * @param {string} channel
 		 * @param {string} text
 		 */
@@ -798,6 +884,7 @@ export const useChatStore = defineStore('chat', {
 
 			this.history[channel].push(msg);
 			persistHistory(this.history);
+			this.touchChannel(channel);
 
 			if (bc) {
 				try {
@@ -955,6 +1042,7 @@ export const useChatStore = defineStore('chat', {
 						invited: [],
 						banned: [],
 						kicks: {},
+						lastActivity: Date.now(),
 					};
 
 					server.channels.push(newChan);
@@ -997,6 +1085,7 @@ export const useChatStore = defineStore('chat', {
 						invited: [],
 						banned: [],
 						kicks: {},
+						lastActivity: Date.now(),
 					};
 
 					/** @type {Server} */
@@ -1545,6 +1634,10 @@ if (bc) {
 			chatStore.selectedServerId = data.selectedServerId;
 		} else if (data.type === 'status_updated') {
 			chatStore.applyUserStatus(data.username, data.status);
+		} else if (data.type === 'channels_expired') {
+			// Aj offline karta musí zahodiť históriu, inak by ju pri ďalšom uložení vrátila späť
+			chatStore.servers = loadStoredServers();
+			chatStore.applyExpiredChannels(data.names);
 		}
 	};
 }

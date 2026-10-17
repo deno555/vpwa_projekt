@@ -152,8 +152,25 @@
 				<div class="column col" style="min-height: 0">
 					<!-- Chat Messages Area -->
 					<q-scroll-area ref="chatScroll" class="col q-pa-md bg-discord-main chat-scroll-content">
-						<div class="column justify-end" style="min-height: 100%">
-							<div class="text-center channel-welcome-banner q-my-md q-my-sm-xl">
+						<!-- Infinite scroll: staršie správy sa dočítavajú po stránkach pri scrolle hore -->
+						<q-infinite-scroll
+							reverse
+							:offset="200"
+							:disable="hiddenCount === 0"
+							class="column justify-end"
+							style="min-height: 100%"
+							@load="loadOlderMessages"
+						>
+							<template #loading>
+								<div class="row justify-center q-my-sm">
+									<q-spinner-dots color="primary" size="32px" />
+								</div>
+							</template>
+
+							<div
+								v-if="hiddenCount === 0"
+								class="text-center channel-welcome-banner q-my-md q-my-sm-xl"
+							>
 								<q-avatar
 									size="56px"
 									color="grey-8"
@@ -171,7 +188,7 @@
 
 							<!-- Messages -->
 							<div
-								v-for="msg in currentMessages"
+								v-for="msg in visibleMessages"
 								:key="msg.id"
 								class="q-mb-sm flex q-py-xs msg-row"
 								:class="{
@@ -232,7 +249,7 @@
 									/>
 								</div>
 							</div>
-						</div>
+						</q-infinite-scroll>
 					</q-scroll-area>
 
 					<!-- Message Input Area (Príkazový riadok) -->
@@ -601,6 +618,9 @@ interface ChannelItem {
 	banned: string[];
 }
 
+// Počet správ načítaných naraz pri infinite scrolle
+const MESSAGES_PAGE_SIZE = 20;
+
 export default defineComponent({
 	name: 'ChannelPage',
 
@@ -614,7 +634,13 @@ export default defineComponent({
 			showMembers: false,
 			typingPreviewOpen: false,
 			typingPreviewUser: '',
+			// Počet najstarších správ, ktoré ešte nie sú vykreslené (dočítajú sa scrollom hore)
+			hiddenCount: 0,
 		};
+	},
+
+	created() {
+		this.resetVisibleMessages();
 	},
 
 	computed: {
@@ -702,6 +728,11 @@ export default defineComponent({
 			return this.chatStore.messagesFor(this.channelName);
 		},
 
+		// Nové správy sa pridávajú na koniec, takže skryté ostávajú iba tie najstaršie
+		visibleMessages() {
+			return this.currentMessages.slice(this.hiddenCount);
+		},
+
 		lastMessageId(): number | undefined {
 			return this.currentMessages[this.currentMessages.length - 1]?.id;
 		},
@@ -766,6 +797,7 @@ export default defineComponent({
 			}
 			this.stopTyping();
 			this.typingPreviewOpen = false;
+			this.resetVisibleMessages();
 			this.scrollToBottom();
 		},
 		// Po každej novej správe (vlastnej aj cudzej) scrollneme na ňu
@@ -797,6 +829,26 @@ export default defineComponent({
 	},
 
 	methods: {
+		resetVisibleMessages() {
+			this.hiddenCount = Math.max(0, this.currentMessages.length - MESSAGES_PAGE_SIZE);
+		},
+
+		/**
+		 * Dočítanie ďalšej stránky starších správ (volá q-infinite-scroll pri scrolle hore).
+		 * Pozíciu scrollu po pridaní správ navrchu dorovnáva samotný q-infinite-scroll.
+		 */
+		loadOlderMessages(_index: number, done: (stop?: boolean) => void) {
+			if (this.hiddenCount === 0) {
+				done(true);
+				return;
+			}
+			setTimeout(() => {
+				// simulate network delay
+				this.hiddenCount = Math.max(0, this.hiddenCount - MESSAGES_PAGE_SIZE);
+				done(this.hiddenCount === 0);
+			}, 300);
+		},
+
 		scrollToBottom(smooth = false) {
 			// setScrollPercentage počíta s rozmermi, ktoré QScrollArea meria asynchrónne,
 			// takže by skončil nad práve pridanou správou. Scrollujeme priamo na scrollHeight.

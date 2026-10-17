@@ -509,6 +509,7 @@ export default defineComponent({
 	data() {
 		return {
 			statusOptions: STATUS_OPTIONS,
+			expiryInterval: null as ReturnType<typeof setInterval> | null,
 		};
 	},
 
@@ -518,6 +519,35 @@ export default defineComponent({
 		if (username && !this.chatStore.userStatuses[username.trim().toLowerCase()]) {
 			this.chatStore.setUserStatus(username, 'online');
 		}
+
+		// Kanály neaktívne viac ako 30 dní zanikajú (pri štarte a potom každú minútu)
+		this.chatStore.removeExpiredChannels();
+		this.expiryInterval = setInterval(() => {
+			this.chatStore.removeExpiredChannels();
+		}, 60 * 1000);
+	},
+
+	beforeUnmount() {
+		if (this.expiryInterval) {
+			clearInterval(this.expiryInterval);
+			this.expiryInterval = null;
+		}
+	},
+
+	watch: {
+		// Ak zanikol práve otvorený kanál, presunieme používateľa inam
+		'chatStore.lastExpiredChannels'(names: string[]) {
+			const params = this.$route.params as Record<string, string>;
+			const current = (params.channelId || '').toLowerCase();
+			if (!current || !names.some((n) => n.toLowerCase() === current)) return;
+			this.$q.notify({
+				type: 'info',
+				icon: 'auto_delete',
+				message: `Kanál #${params.channelId} zanikol po 30 dňoch bez novej správy.`,
+				position: 'top',
+			});
+			void this.$router.replace('/');
+		},
 	},
 
 	computed: {

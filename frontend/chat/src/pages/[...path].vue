@@ -14,7 +14,6 @@
 				label="Go Home"
 				no-caps
 			/>
-			penis
 		</div>
 	</div>
 </template>

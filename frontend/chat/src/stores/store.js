@@ -17,6 +17,23 @@ const ACCOUNTS = [
 const savedAccounts =
 	typeof window !== 'undefined' ? localStorage.getItem('registeredAccounts') : null;
 
+/**
+ * Nájde existujúci účet podľa prezývky (bez ohľadu na veľkosť písmen).
+ * Číta aktuálny stav z localStorage, aby našiel aj účty registrované v inej karte.
+ * @param {string} nick
+ * @returns {Account | null}
+ */
+function findAccountByNick(nick) {
+	let accounts = ACCOUNTS;
+	try {
+		const stored = localStorage.getItem('registeredAccounts');
+		if (stored) accounts = JSON.parse(stored);
+	} catch {
+		// ignore
+	}
+	return accounts.find((a) => isSameUser(a.username, nick)) || null;
+}
+
 export function isSameUser(u1, u2) {
 	if (!u1 || !u2) return false;
 	return String(u1).trim().toLowerCase() === String(u2).trim().toLowerCase();
@@ -773,10 +790,35 @@ export const useChatStore = defineStore('chat', {
 		},
 
 		/**
-		 * Odstráni históriu zaniknutých kanálov (aj z localStorage, inak by ju persistHistory vrátil).
+		 * Odstráni históriu kanálov zaniknutých pre neaktivitu a oznámi to layoutu.
 		 * @param {string[]} names
 		 */
 		applyExpiredChannels(names) {
+			this.removeChannelHistory(names);
+			this.lastExpiredChannels = names;
+		},
+
+		/**
+		 * Zmaže históriu zrušeného kanála (/quit, /cancel správcom) a oznámi to ostatným kartám,
+		 * aby nový kanál s rovnakým názvom nezačínal so starými správami.
+		 * @param {string} name
+		 */
+		discardDeletedChannel(name) {
+			this.removeChannelHistory([name]);
+			if (bc) {
+				try {
+					bc.postMessage({ type: 'channels_deleted', names: [name] });
+				} catch {
+					// ignore
+				}
+			}
+		},
+
+		/**
+		 * Odstráni históriu kanálov (aj z localStorage, inak by ju persistHistory vrátil).
+		 * @param {string[]} names
+		 */
+		removeChannelHistory(names) {
 			// História je kľúčovaná názvom - nemažeme ju, ak kanál s rovnakým menom ešte existuje
 			const stillUsed = new Set(
 				this.servers.flatMap((s) => s.channels.map((c) => c.name.toLowerCase())),
@@ -791,7 +833,6 @@ export const useChatStore = defineStore('chat', {
 			}
 			this.history = history;
 			localStorage.setItem('chatHistory', JSON.stringify(stored));
-			this.lastExpiredChannels = names;
 		},
 
 		/**
@@ -932,20 +973,7 @@ export const useChatStore = defineStore('chat', {
 				}
 			}
 
-			// Upozornenia podľa stavu odosielateľa:
-			// - v stave "online": vyskočí Quasar okno pri odoslaní správy (že používateľ napísal správu v danom tíme a čo napísal)
-			// - v stave "mentions" (iba označené): vyskočí iba ak správa obsahuje @označenie používateľa
-			const myStatus = this.currentUserStatus;
-			if (myStatus === 'online') {
-				const isMentioned = currentUser ? isUserMentioned(msg.text, currentUser) : false;
-				triggerPing(channel, msg, isMentioned, teamName);
-			} else if (
-				myStatus === 'mentions' &&
-				currentUser &&
-				isUserMentioned(msg.text, currentUser)
-			) {
-				triggerPing(channel, msg, true, teamName);
-			}
+			// Notifikácie dostávajú iba ostatní používatelia (bc.onmessage), nie odosielateľ
 		},
 
 		/**
@@ -1201,9 +1229,16 @@ export const useChatStore = defineStore('chat', {
 					if (args.length === 0 || !args[0]) {
 						return { success: false, message: 'Použitie: /invite <nickName>' };
 					}
-					const targetNick = args[0].trim();
+					const targetAccount = findAccountByNick(args[0].trim());
+					if (!targetAccount) {
+						return {
+							success: false,
+							message: `Používateľ ${args[0].trim()} neexistuje.`,
+						};
+					}
+					const targetNick = targetAccount.username;
 
-					if (targetNick === currentUser) {
+					if (isSameUser(targetNick, currentUser)) {
 						return { success: false, message: 'Nemôžeš pozvať sám seba.' };
 					}
 
@@ -1211,11 +1246,13 @@ export const useChatStore = defineStore('chat', {
 						return { success: false, message: 'Nie si v žiadnom kanáli.' };
 					}
 
-					// Používateľ je pridaný do zoznamu členov tímu (servera), aby videl tím
-					if (!Array.isArray(server.members)) server.members = [];
-					if (!server.members.includes(targetNick)) {
-						server.members.push(targetNick);
-					}
+					// Až po úspešnej pozvánke je používateľ pridaný do tímu (servera), aby videl tím
+					const addTargetToServer = () => {
+						if (!Array.isArray(server.members)) server.members = [];
+						if (!server.members.includes(targetNick)) {
+							server.members.push(targetNick);
+						}
+					};
 
 					// Ak je to súkromný kanál
 					if (currentChannel.type === 'private') {
@@ -1243,6 +1280,7 @@ export const useChatStore = defineStore('chat', {
 							currentChannel.invited.push(targetNick);
 						}
 
+						addTargetToServer();
 						this.saveServers();
 						this.addSystemMessage(
 							currentChannel.name,
@@ -1288,6 +1326,7 @@ export const useChatStore = defineStore('chat', {
 							currentChannel.members.push(targetNick);
 						}
 
+						addTargetToServer();
 						this.saveServers();
 						this.addSystemMessage(
 							currentChannel.name,
@@ -1318,6 +1357,7 @@ export const useChatStore = defineStore('chat', {
 						currentChannel.invited.push(targetNick);
 					}
 
+					addTargetToServer();
 					this.saveServers();
 					this.addSystemMessage(
 						currentChannel.name,
@@ -1387,7 +1427,14 @@ export const useChatStore = defineStore('chat', {
 					if (args.length === 0 || !args[0]) {
 						return { success: false, message: 'Použitie: /kick <nickName>' };
 					}
-					const targetNick = args[0].trim();
+					const targetAccount = findAccountByNick(args[0].trim());
+					if (!targetAccount) {
+						return {
+							success: false,
+							message: `Používateľ ${args[0].trim()} neexistuje.`,
+						};
+					}
+					const targetNick = targetAccount.username;
 
 					if (!currentChannel) {
 						return { success: false, message: 'Nie si v žiadnom kanáli.' };
@@ -1397,6 +1444,17 @@ export const useChatStore = defineStore('chat', {
 						return {
 							success: false,
 							message: 'V súkromnom kanáli použi príkaz /revoke <nickName>.',
+						};
+					}
+
+					// Zabanovaný už nie je členom - ten dostane hlášku o bane nižšie
+					if (
+						!userListIncludes(currentChannel.members, targetNick) &&
+						!userListIncludes(currentChannel.banned, targetNick)
+					) {
+						return {
+							success: false,
+							message: `Používateľ ${targetNick} nie je členom kanála #${currentChannel.name}.`,
 						};
 					}
 
@@ -1539,6 +1597,7 @@ export const useChatStore = defineStore('chat', {
 						server.channels[0]?.name ||
 						'všeobecný';
 					this.saveServers();
+					this.discardDeletedChannel(deletedChannelName);
 
 					return {
 						success: true,
@@ -1581,6 +1640,7 @@ export const useChatStore = defineStore('chat', {
 							server.channels[0]?.name ||
 							'všeobecný';
 						this.saveServers();
+						this.discardDeletedChannel(deletedChannelName);
 
 						return {
 							success: true,
@@ -1737,6 +1797,9 @@ if (bc) {
 			// Aj offline karta musí zahodiť históriu, inak by ju pri ďalšom uložení vrátila späť
 			chatStore.servers = loadStoredServers();
 			chatStore.applyExpiredChannels(data.names);
+		} else if (data.type === 'channels_deleted') {
+			chatStore.servers = loadStoredServers();
+			chatStore.removeChannelHistory(data.names);
 		}
 	};
 }

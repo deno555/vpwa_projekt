@@ -370,10 +370,11 @@
 							anchor="top left"
 							self="bottom left"
 							:offset="[0, 8]"
-							class="status-menu"
+							dark
+							class="status-menu bg-grey-10 text-white"
 							max-width="90vw"
 						>
-							<q-list dense style="min-width: 180px">
+							<q-list dark dense style="min-width: 180px">
 								<q-item
 									v-for="option in statusOptions"
 									:key="option.value"

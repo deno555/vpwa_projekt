@@ -9,7 +9,9 @@
 							<q-icon name="chat" size="30px" color="primary" />
 						</div>
 						<div class="text-h5 text-weight-bold text-white q-mt-xs">Vitaj späť!</div>
-						<div class="text-caption text-grey-5 q-mt-xs">Máme radosť, že ťa znova vidíme!</div>
+						<div class="text-caption text-grey-5 q-mt-xs">
+							Máme radosť, že ťa znova vidíme!
+						</div>
 					</div>
 
 					<q-form @submit="onSubmit">
@@ -76,7 +78,10 @@
 
 						<!-- Error Banner -->
 						<transition name="fade">
-							<div v-if="error" class="discord-error-banner q-mb-md row items-center no-wrap">
+							<div
+								v-if="error"
+								class="discord-error-banner q-mb-md row items-center no-wrap"
+							>
 								<q-icon
 									name="error_outline"
 									size="20px"

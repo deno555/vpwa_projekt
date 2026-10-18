@@ -8,7 +8,9 @@
 						<div class="auth-icon-wrapper q-mb-sm">
 							<q-icon name="person_add" size="30px" color="primary" />
 						</div>
-						<div class="text-h5 text-weight-bold text-white q-mt-xs">Vytvorenie účtu</div>
+						<div class="text-h5 text-weight-bold text-white q-mt-xs">
+							Vytvorenie účtu
+						</div>
 						<div class="text-caption text-grey-5 q-mt-xs">
 							Pripoj sa k svojim priateľom a komunitám
 						</div>
@@ -129,7 +131,9 @@
 									placeholder="8–32 znakov"
 									:rules="[
 										(v) => !!v || 'Heslo je povinné',
-										(v) => (v.length >= 8 && v.length <= 32) || 'Heslo musí mať 8–32 znakov',
+										(v) =>
+											(v.length >= 8 && v.length <= 32) ||
+											'Heslo musí mať 8–32 znakov',
 									]"
 									lazy-rules
 								>
@@ -176,7 +180,10 @@
 
 						<!-- Error Banner -->
 						<transition name="fade">
-							<div v-if="error" class="discord-error-banner q-mb-md row items-center no-wrap">
+							<div
+								v-if="error"
+								class="discord-error-banner q-mb-md row items-center no-wrap"
+							>
 								<q-icon
 									name="error_outline"
 									size="20px"
@@ -200,7 +207,9 @@
 						<!-- Switch to Login -->
 						<div class="text-caption text-grey-5 q-mt-md text-center">
 							Už máš účet?
-							<router-link to="/login" class="discord-link q-ml-xs"> Prihlás sa </router-link>
+							<router-link to="/login" class="discord-link q-ml-xs">
+								Prihlás sa
+							</router-link>
 						</div>
 					</q-form>
 				</div>

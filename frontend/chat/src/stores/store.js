@@ -60,10 +60,15 @@ function loadStoredStatuses() {
 	}
 }
 
+function getInitialCurrentUser() {
+	if (typeof window === 'undefined') return null;
+	return sessionStorage.getItem('currentUser') || localStorage.getItem('currentUser') || null;
+}
+
 export const useAuthStore = defineStore('auth', {
 	state: () => ({
 		/** @type {string | null} */
-		currentUser: typeof window !== 'undefined' ? localStorage.getItem('currentUser') : null,
+		currentUser: getInitialCurrentUser(),
 		/** @type {Account[]} */
 		accounts: savedAccounts ? JSON.parse(savedAccounts) : [...ACCOUNTS],
 	}),
@@ -90,6 +95,7 @@ export const useAuthStore = defineStore('auth', {
 
 			this.currentUser = account.username;
 			if (typeof window !== 'undefined') {
+				sessionStorage.setItem('currentUser', account.username);
 				localStorage.setItem('currentUser', account.username);
 			}
 			return true;
@@ -115,6 +121,7 @@ export const useAuthStore = defineStore('auth', {
 			this.accounts.push(account);
 			if (typeof window !== 'undefined') {
 				localStorage.setItem('registeredAccounts', JSON.stringify(this.accounts));
+				sessionStorage.setItem('currentUser', account.username);
 				localStorage.setItem('currentUser', account.username);
 			}
 			this.currentUser = account.username;
@@ -124,6 +131,7 @@ export const useAuthStore = defineStore('auth', {
 		logout() {
 			this.currentUser = null;
 			if (typeof window !== 'undefined') {
+				sessionStorage.removeItem('currentUser');
 				localStorage.removeItem('currentUser');
 			}
 		},
@@ -448,7 +456,9 @@ export const useChatStore = defineStore('chat', {
 		typingTexts: {},
 		/** @type {Server[]} */
 		servers: loadStoredServers(),
-		selectedServerId: savedSelectedServerId ? Number(savedSelectedServerId) : INITIAL_SERVERS[0].id,
+		selectedServerId: savedSelectedServerId
+			? Number(savedSelectedServerId)
+			: INITIAL_SERVERS[0].id,
 		/** @type {Record<string, UserStatus>} */
 		userStatuses: loadStoredStatuses(),
 		/** @type {boolean} */
@@ -457,12 +467,16 @@ export const useChatStore = defineStore('chat', {
 		lastExpiredChannels: [],
 	}),
 	getters: {
-		statusOf: (state) => (/** @type {string} */ username) =>
-			state.userStatuses[statusKey(username)] || 'offline',
+		statusOf: (state) => (/** @type {string} */ username) => {
+			if (!username) return 'offline';
+			return state.userStatuses[statusKey(username)] || 'online';
+		},
 		/** @returns {UserStatus} */
-		currentUserStatus() {
+		currentUserStatus(state) {
 			const auth = useAuthStore();
-			return this.statusOf(auth.currentUser || '');
+			const current = auth.currentUser;
+			if (!current) return 'offline';
+			return state.userStatuses[statusKey(current)] || 'online';
 		},
 		visibleServers: (state) => {
 			const auth = useAuthStore();
@@ -489,7 +503,8 @@ export const useChatStore = defineStore('chat', {
 			);
 		},
 		currentChannels: (state) => {
-			const server = state.servers.find((s) => s.id === state.selectedServerId) || state.servers[0];
+			const server =
+				state.servers.find((s) => s.id === state.selectedServerId) || state.servers[0];
 			return server ? server.channels : [];
 		},
 		messagesFor: (state) => (/** @type {string} */ channel) =>
@@ -498,11 +513,16 @@ export const useChatStore = defineStore('chat', {
 			const channelMap = state.typingUsers[channel];
 			if (!channelMap) return [];
 			const now = Date.now();
-			return Object.entries(channelMap)
-				.filter(([, timestamp]) => now - timestamp < 3500)
-				// Offline používateľ sa v "is typing" nezobrazuje
-				.filter(([user]) => (state.userStatuses[statusKey(user)] || 'offline') !== 'offline')
-				.map(([user]) => user);
+			return (
+				Object.entries(channelMap)
+					.filter(([, timestamp]) => now - timestamp < 3500)
+					// Offline používateľ sa v "is typing" nezobrazuje
+					.filter(
+						([user]) =>
+							(state.userStatuses[statusKey(user)] || 'offline') !== 'offline',
+					)
+					.map(([user]) => user)
+			);
 		},
 		typingTextOf: (state) => (/** @type {string} */ channel, /** @type {string} */ username) =>
 			state.typingTexts[channel]?.[username] || '',
@@ -552,45 +572,47 @@ export const useChatStore = defineStore('chat', {
 			}
 			return null;
 		},
-		isMember: (state) => (/** @type {string} */ channelName, /** @type {string} */ username) => {
-			const name = String(channelName || '')
-				.toLowerCase()
-				.replace(/^#/, '');
-			// Najprv skontrolujeme aktuálne vybraný server!
-			const curServer = state.servers.find((s) => s.id === state.selectedServerId);
-			if (curServer) {
-				const found = curServer.channels.find((c) => c.name.toLowerCase() === name);
-				if (found) {
-					return userListIncludes(found.members, username);
+		isMember:
+			(state) => (/** @type {string} */ channelName, /** @type {string} */ username) => {
+				const name = String(channelName || '')
+					.toLowerCase()
+					.replace(/^#/, '');
+				// Najprv skontrolujeme aktuálne vybraný server!
+				const curServer = state.servers.find((s) => s.id === state.selectedServerId);
+				if (curServer) {
+					const found = curServer.channels.find((c) => c.name.toLowerCase() === name);
+					if (found) {
+						return userListIncludes(found.members, username);
+					}
 				}
-			}
-			for (const server of state.servers) {
-				const found = server.channels.find((c) => c.name.toLowerCase() === name);
-				if (found) {
-					return userListIncludes(found.members, username);
+				for (const server of state.servers) {
+					const found = server.channels.find((c) => c.name.toLowerCase() === name);
+					if (found) {
+						return userListIncludes(found.members, username);
+					}
 				}
-			}
-			return false;
-		},
-		isBanned: (state) => (/** @type {string} */ channelName, /** @type {string} */ username) => {
-			const name = String(channelName || '')
-				.toLowerCase()
-				.replace(/^#/, '');
-			const curServer = state.servers.find((s) => s.id === state.selectedServerId);
-			if (curServer) {
-				const found = curServer.channels.find((c) => c.name.toLowerCase() === name);
-				if (found) {
-					return userListIncludes(found.banned, username);
+				return false;
+			},
+		isBanned:
+			(state) => (/** @type {string} */ channelName, /** @type {string} */ username) => {
+				const name = String(channelName || '')
+					.toLowerCase()
+					.replace(/^#/, '');
+				const curServer = state.servers.find((s) => s.id === state.selectedServerId);
+				if (curServer) {
+					const found = curServer.channels.find((c) => c.name.toLowerCase() === name);
+					if (found) {
+						return userListIncludes(found.banned, username);
+					}
 				}
-			}
-			for (const server of state.servers) {
-				const found = server.channels.find((c) => c.name.toLowerCase() === name);
-				if (found) {
-					return userListIncludes(found.banned, username);
+				for (const server of state.servers) {
+					const found = server.channels.find((c) => c.name.toLowerCase() === name);
+					if (found) {
+						return userListIncludes(found.banned, username);
+					}
 				}
-			}
-			return false;
-		},
+				return false;
+			},
 	},
 	actions: {
 		saveServers() {
@@ -657,7 +679,11 @@ export const useChatStore = defineStore('chat', {
 			// Pri prechode do offline zrušíme jeho typing vo všetkých kanáloch
 			if (status === 'offline') {
 				for (const channel of Object.keys(this.typingUsers)) {
-					if (Object.keys(this.typingUsers[channel] || {}).some((u) => isSameUser(u, username))) {
+					if (
+						Object.keys(this.typingUsers[channel] || {}).some((u) =>
+							isSameUser(u, username),
+						)
+					) {
 						const updated = { ...this.typingUsers[channel] };
 						const updatedTexts = { ...this.typingTexts[channel] };
 						for (const u of Object.keys(updated)) {
@@ -674,7 +700,11 @@ export const useChatStore = defineStore('chat', {
 
 			// Po návrate z offline načítame, čo medzitým pribudlo
 			const auth = useAuthStore();
-			if (prev === 'offline' && status !== 'offline' && isSameUser(username, auth.currentUser)) {
+			if (
+				prev === 'offline' &&
+				status !== 'offline' &&
+				isSameUser(username, auth.currentUser)
+			) {
 				this.reloadFromStorage();
 			}
 		},
@@ -886,25 +916,35 @@ export const useChatStore = defineStore('chat', {
 			persistHistory(this.history);
 			this.touchChannel(channel);
 
+			const chanInfo = this.findChannelByName(channel);
+			const teamName = chanInfo?.server?.name || this.currentServer?.name || '';
+
 			if (bc) {
 				try {
 					bc.postMessage({
 						type: 'new_message',
 						channel,
 						message: msg,
+						team: teamName,
 					});
 				} catch {
 					// ignore
 				}
 			}
 
-			// Ak správa obsahuje @zmienku pre odosielateľa (napr. testovanie pingu samého seba)
-			if (
-				(this.currentUserStatus === 'online' || this.currentUserStatus === 'mentions') &&
+			// Upozornenia podľa stavu odosielateľa:
+			// - v stave "online": vyskočí Quasar okno pri odoslaní správy (že používateľ napísal správu v danom tíme a čo napísal)
+			// - v stave "mentions" (iba označené): vyskočí iba ak správa obsahuje @označenie používateľa
+			const myStatus = this.currentUserStatus;
+			if (myStatus === 'online') {
+				const isMentioned = currentUser ? isUserMentioned(msg.text, currentUser) : false;
+				triggerPing(channel, msg, isMentioned, teamName);
+			} else if (
+				myStatus === 'mentions' &&
 				currentUser &&
 				isUserMentioned(msg.text, currentUser)
 			) {
-				triggerPing(channel, msg, true);
+				triggerPing(channel, msg, true, teamName);
 			}
 		},
 
@@ -975,18 +1015,29 @@ export const useChatStore = defineStore('chat', {
 				// --- 1. /join channelName [private] ---
 				case 'join': {
 					if (args.length === 0 || !args[0]) {
-						return { success: false, message: 'Použitie: /join <channelName> [private]' };
+						return {
+							success: false,
+							message: 'Použitie: /join <channelName> [private]',
+						};
 					}
 					const rawName = args[0];
 					const isPrivate = args.slice(1).some((a) => a.toLowerCase() === 'private');
-					const formattedName = rawName.toLowerCase().replace(/^#/, '').replace(/\s+/g, '-');
+					const formattedName = rawName
+						.toLowerCase()
+						.replace(/^#/, '')
+						.replace(/\s+/g, '-');
 
 					// Vyhľadanie v aktuálnom serveri
-					const existing = server.channels.find((c) => c.name.toLowerCase() === formattedName);
+					const existing = server.channels.find(
+						(c) => c.name.toLowerCase() === formattedName,
+					);
 
 					if (existing) {
 						// Kontrola banu
-						if (Array.isArray(existing.banned) && existing.banned.includes(currentUser)) {
+						if (
+							Array.isArray(existing.banned) &&
+							existing.banned.includes(currentUser)
+						) {
 							return {
 								success: false,
 								message: `Nemôžeš sa pripojiť do kanála #${existing.name}, pretože v ňom máš trvalý ban.`,
@@ -997,8 +1048,10 @@ export const useChatStore = defineStore('chat', {
 						if (existing.type === 'private') {
 							const hasAccess =
 								existing.admin === currentUser ||
-								(Array.isArray(existing.members) && existing.members.includes(currentUser)) ||
-								(Array.isArray(existing.invited) && existing.invited.includes(currentUser));
+								(Array.isArray(existing.members) &&
+									existing.members.includes(currentUser)) ||
+								(Array.isArray(existing.invited) &&
+									existing.invited.includes(currentUser));
 
 							if (!hasAccess) {
 								return {
@@ -1066,7 +1119,10 @@ export const useChatStore = defineStore('chat', {
 				// --- 2. /create <nazov servera> [private] ---
 				case 'create': {
 					if (args.length === 0) {
-						return { success: false, message: 'Použitie: /create <nazov servera> [private]' };
+						return {
+							success: false,
+							message: 'Použitie: /create <nazov servera> [private]',
+						};
 					}
 					const isPrivate = args[args.length - 1].toLowerCase() === 'private';
 					const nameArgs = isPrivate ? args.slice(0, -1) : args;
@@ -1206,12 +1262,16 @@ export const useChatStore = defineStore('chat', {
 					) {
 						return {
 							success: false,
-							message: 'Musíš byť členom kanála, aby si mohol pozvať iného používateľa.',
+							message:
+								'Musíš byť členom kanála, aby si mohol pozvať iného používateľa.',
 						};
 					}
 
 					// Ak má cieľový používateľ trvalý ban:
-					if (Array.isArray(currentChannel.banned) && currentChannel.banned.includes(targetNick)) {
+					if (
+						Array.isArray(currentChannel.banned) &&
+						currentChannel.banned.includes(targetNick)
+					) {
 						if (currentChannel.admin !== currentUser) {
 							return {
 								success: false,
@@ -1220,7 +1280,9 @@ export const useChatStore = defineStore('chat', {
 						}
 
 						// Správca obnovuje prístup
-						currentChannel.banned = currentChannel.banned.filter((b) => b !== targetNick);
+						currentChannel.banned = currentChannel.banned.filter(
+							(b) => b !== targetNick,
+						);
 						if (currentChannel.kicks) delete currentChannel.kicks[targetNick];
 						if (!currentChannel.members.includes(targetNick)) {
 							currentChannel.members.push(targetNick);
@@ -1280,22 +1342,33 @@ export const useChatStore = defineStore('chat', {
 					}
 
 					if (currentChannel.type !== 'private') {
-						return { success: false, message: 'Príkaz /revoke je určený iba pre súkromné kanály.' };
+						return {
+							success: false,
+							message: 'Príkaz /revoke je určený iba pre súkromné kanály.',
+						};
 					}
 
 					if (currentChannel.admin !== currentUser) {
 						return {
 							success: false,
-							message: 'Iba správca súkromného kanála môže odoberať prístup používateľom.',
+							message:
+								'Iba správca súkromného kanála môže odoberať prístup používateľom.',
 						};
 					}
 
 					if (targetNick === currentChannel.admin) {
-						return { success: false, message: 'Správca kanála nemôže odobrať prístup sám sebe.' };
+						return {
+							success: false,
+							message: 'Správca kanála nemôže odobrať prístup sám sebe.',
+						};
 					}
 
-					currentChannel.members = (currentChannel.members || []).filter((m) => m !== targetNick);
-					currentChannel.invited = (currentChannel.invited || []).filter((i) => i !== targetNick);
+					currentChannel.members = (currentChannel.members || []).filter(
+						(m) => m !== targetNick,
+					);
+					currentChannel.invited = (currentChannel.invited || []).filter(
+						(i) => i !== targetNick,
+					);
 
 					this.saveServers();
 					this.addSystemMessage(
@@ -1358,8 +1431,12 @@ export const useChatStore = defineStore('chat', {
 					// Ak vyhadzuje správca -> okamžitý trvalý ban
 					if (currentChannel.admin === currentUser) {
 						currentChannel.banned.push(targetNick);
-						currentChannel.members = (currentChannel.members || []).filter((m) => m !== targetNick);
-						currentChannel.invited = (currentChannel.invited || []).filter((i) => i !== targetNick);
+						currentChannel.members = (currentChannel.members || []).filter(
+							(m) => m !== targetNick,
+						);
+						currentChannel.invited = (currentChannel.invited || []).filter(
+							(i) => i !== targetNick,
+						);
 						delete currentChannel.kicks[targetNick];
 
 						this.saveServers();
@@ -1391,8 +1468,12 @@ export const useChatStore = defineStore('chat', {
 
 					if (voteCount >= 3) {
 						currentChannel.banned.push(targetNick);
-						currentChannel.members = (currentChannel.members || []).filter((m) => m !== targetNick);
-						currentChannel.invited = (currentChannel.invited || []).filter((i) => i !== targetNick);
+						currentChannel.members = (currentChannel.members || []).filter(
+							(m) => m !== targetNick,
+						);
+						currentChannel.invited = (currentChannel.invited || []).filter(
+							(i) => i !== targetNick,
+						);
 						delete currentChannel.kicks[targetNick];
 
 						this.saveServers();
@@ -1449,10 +1530,12 @@ export const useChatStore = defineStore('chat', {
 					}
 
 					const nextChannel =
-						server.channels.find((c) => Array.isArray(c.members) && c.members.includes(currentUser))
-							?.name ||
-						server.channels.find((c) => Array.isArray(c.invited) && c.invited.includes(currentUser))
-							?.name ||
+						server.channels.find(
+							(c) => Array.isArray(c.members) && c.members.includes(currentUser),
+						)?.name ||
+						server.channels.find(
+							(c) => Array.isArray(c.invited) && c.invited.includes(currentUser),
+						)?.name ||
 						server.channels[0]?.name ||
 						'všeobecný';
 					this.saveServers();
@@ -1507,8 +1590,12 @@ export const useChatStore = defineStore('chat', {
 					}
 
 					// Ak je to bežný člen:
-					currentChannel.members = (currentChannel.members || []).filter((m) => m !== currentUser);
-					currentChannel.invited = (currentChannel.invited || []).filter((i) => i !== currentUser);
+					currentChannel.members = (currentChannel.members || []).filter(
+						(m) => m !== currentUser,
+					);
+					currentChannel.invited = (currentChannel.invited || []).filter(
+						(i) => i !== currentUser,
+					);
 
 					this.saveServers();
 					this.addSystemMessage(
@@ -1517,10 +1604,12 @@ export const useChatStore = defineStore('chat', {
 					);
 
 					const nextChannel =
-						server.channels.find((c) => Array.isArray(c.members) && c.members.includes(currentUser))
-							?.name ||
-						server.channels.find((c) => Array.isArray(c.invited) && c.invited.includes(currentUser))
-							?.name ||
+						server.channels.find(
+							(c) => Array.isArray(c.members) && c.members.includes(currentUser),
+						)?.name ||
+						server.channels.find(
+							(c) => Array.isArray(c.invited) && c.invited.includes(currentUser),
+						)?.name ||
 						server.channels.find(
 							(c) =>
 								c.type === 'public' &&
@@ -1552,7 +1641,9 @@ export const useChatStore = defineStore('chat', {
 						};
 					}
 
-					const members = Array.isArray(currentChannel.members) ? currentChannel.members : [];
+					const members = Array.isArray(currentChannel.members)
+						? currentChannel.members
+						: [];
 					const formatted = members
 						.map((m) => (m === currentChannel.admin ? `👑 ${m} (správca)` : `• ${m}`))
 						.join('\n');
@@ -1611,23 +1702,31 @@ if (bc) {
 		} else if (data.type === 'new_message') {
 			if (isOffline) return;
 			chatStore.applyNewMessage(data.channel, data.message);
+
 			const auth = useAuthStore();
 			const me = auth.currentUser;
-			// Notifikácia o novej správe v kanáloch, kde je používateľ členom (okrem vlastných správ):
-			// - v stave "online" prichádza notifikácia na každú správu
-			// - v stave "mentions" (Iba označenia) prichádza notifikácia iba keď je používateľ označený
-			// - v stave "nerušiť" (dnd) sa notifikácie nezobrazujú
-			if (
-				me &&
-				!isSameUser(data.message.author, me) &&
-				chatStore.isMember(data.channel, me)
-			) {
-				const isMentioned = isUserMentioned(data.message.text, me);
-				if (chatStore.currentUserStatus === 'online') {
-					triggerPing(data.channel, data.message, isMentioned);
-				} else if (chatStore.currentUserStatus === 'mentions' && isMentioned) {
-					triggerPing(data.channel, data.message, true);
+			if (!me) return;
+
+			// Vlastné správy prijaté cez broadcast z inej karty/okna neoznamujeme
+			if (isSameUser(data.message.author, me)) return;
+
+			const myStatus = chatStore.currentUserStatus;
+
+			// Nerušiť (dnd) -> žiadne notifikácie
+			if (myStatus === 'dnd' || myStatus === 'offline') return;
+
+			const chanInfo = chatStore.findChannelByName(data.channel);
+			const teamName = data.team || chanInfo?.server?.name || '';
+			const isMentioned = isUserMentioned(data.message.text, me);
+
+			// V stave "mentions" (Iba označenia): notifikácia iba pri @označení
+			// V stave "online": notifikácia pri každej správe (zvýraznená ak je označený)
+			if (myStatus === 'mentions') {
+				if (isMentioned) {
+					triggerPing(data.channel, data.message, true, teamName);
 				}
+			} else if (myStatus === 'online') {
+				triggerPing(data.channel, data.message, isMentioned, teamName);
 			}
 		} else if (data.type === 'servers_updated') {
 			chatStore.servers = data.servers;

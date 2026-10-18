@@ -25,7 +25,9 @@
 									<q-btn
 										round
 										unelevated
-										:color="server.id === selectedServerId ? 'primary' : 'grey-8'"
+										:color="
+											server.id === selectedServerId ? 'primary' : 'grey-8'
+										"
 										class="server-btn"
 										size="md"
 										:title="server.name"
@@ -54,7 +56,9 @@
 					<!-- Channels Column (240px) -->
 					<div class="channel-sidebar col" style="height: 100%">
 						<!-- Sidebar Header -->
-						<div class="channel-header flex items-center justify-between q-px-md cursor-pointer">
+						<div
+							class="channel-header flex items-center justify-between q-px-md cursor-pointer"
+						>
 							<div class="row items-center no-wrap ellipsis col q-mr-xs">
 								<div class="text-weight-bold ellipsis">
 									{{ selectedServer?.name || 'Žiadny server' }}
@@ -100,7 +104,10 @@
 									>
 										<q-item-section>
 											<div>
-												Vlastník: <strong class="text-white">{{ selectedServer.admin }}</strong>
+												Vlastník:
+												<strong class="text-white">{{
+													selectedServer.admin
+												}}</strong>
 											</div>
 											<div
 												v-if="isServerAdmin"
@@ -130,7 +137,11 @@
 										class="text-red-4 hover-bg-grey-9"
 									>
 										<q-item-section>
-											{{ isServerAdmin ? 'Zrušiť server (správca)' : 'Odísť zo servera' }}
+											{{
+												isServerAdmin
+													? 'Zrušiť server (správca)'
+													: 'Odísť zo servera'
+											}}
 										</q-item-section>
 										<q-item-section side>
 											<q-icon name="logout" size="xs" color="red-4" />
@@ -159,7 +170,10 @@
 							<div class="q-pa-sm">
 								<!-- Top section for invites -->
 								<div v-if="invitedChannels.length > 0" class="q-mb-md">
-									<div class="text-overline text-grey-5 q-px-sm" style="line-height: 1">
+									<div
+										class="text-overline text-grey-5 q-px-sm"
+										style="line-height: 1"
+									>
 										POZVÁNKY
 									</div>
 									<q-list dense>
@@ -174,9 +188,14 @@
 											class="channel-item invite-highlight q-mt-xs rounded-borders"
 											active-class="text-white bg-grey-9"
 										>
-											<q-item-section avatar style="min-width: 30px; padding-right: 0">
+											<q-item-section
+												avatar
+												style="min-width: 30px; padding-right: 0"
+											>
 												<q-icon
-													:name="channel.type === 'private' ? 'lock' : 'tag'"
+													:name="
+														channel.type === 'private' ? 'lock' : 'tag'
+													"
 													size="xs"
 													color="primary"
 												/>
@@ -189,8 +208,12 @@
 								</div>
 
 								<!-- Regular channels list -->
-								<div class="flex items-center justify-between q-px-sm q-mt-sm q-mb-xs group-header">
-									<div class="text-overline text-grey-5" style="line-height: 1">TEXTOVÉ KANÁLY</div>
+								<div
+									class="flex items-center justify-between q-px-sm q-mt-sm q-mb-xs group-header"
+								>
+									<div class="text-overline text-grey-5" style="line-height: 1">
+										TEXTOVÉ KANÁLY
+									</div>
 									<q-btn
 										flat
 										round
@@ -222,8 +245,14 @@
 										class="channel-item q-mb-xs rounded-borders text-grey-5"
 										active-class="text-white bg-grey-9"
 									>
-										<q-item-section avatar style="min-width: 30px; padding-right: 0">
-											<q-icon :name="channel.type === 'private' ? 'lock' : 'tag'" size="xs" />
+										<q-item-section
+											avatar
+											style="min-width: 30px; padding-right: 0"
+										>
+											<q-icon
+												:name="channel.type === 'private' ? 'lock' : 'tag'"
+												size="xs"
+											/>
 										</q-item-section>
 										<q-item-section>
 											{{ channel.name }}
@@ -240,7 +269,9 @@
 													icon="delete"
 													size="xs"
 													color="negative"
-													@click.prevent.stop="deleteChannel(channel.name)"
+													@click.prevent.stop="
+														deleteChannel(channel.name)
+													"
 													title="Zmazať kanál (/quit)"
 												/>
 												<q-btn
@@ -260,7 +291,10 @@
 
 								<!-- Discoverable public channels section -->
 								<div v-if="discoverableChannels.length > 0" class="q-mt-md">
-									<div class="text-overline text-grey-5 q-px-sm" style="line-height: 1">
+									<div
+										class="text-overline text-grey-5 q-px-sm"
+										style="line-height: 1"
+									>
 										DOSTUPNÉ VEREJNÉ KANÁLY
 									</div>
 									<q-list dense>
@@ -274,7 +308,10 @@
 											class="channel-item q-mb-xs rounded-borders text-grey-6"
 											active-class="text-white bg-grey-9"
 										>
-											<q-item-section avatar style="min-width: 30px; padding-right: 0">
+											<q-item-section
+												avatar
+												style="min-width: 30px; padding-right: 0"
+											>
 												<q-icon name="tag" size="xs" color="grey-6" />
 											</q-item-section>
 											<q-item-section>
@@ -309,18 +346,33 @@
 							<q-avatar size="32px" color="primary" text-color="white">
 								{{ currentUsername.charAt(0).toUpperCase() }}
 							</q-avatar>
-							<span class="status-dot" :style="{ backgroundColor: currentStatus.color }" />
+							<span
+								class="status-dot"
+								:style="{ backgroundColor: currentStatus.color }"
+							/>
 						</div>
 						<div class="col q-ml-sm" style="min-width: 0">
-							<div class="text-weight-bold ellipsis" style="font-size: 14px; line-height: 1.2">
+							<div
+								class="text-weight-bold ellipsis"
+								style="font-size: 14px; line-height: 1.2"
+							>
 								{{ currentUsername }}
 							</div>
-							<div class="text-grey-5 ellipsis" style="font-size: 12px; line-height: 1.2">
+							<div
+								class="text-grey-5 ellipsis"
+								style="font-size: 12px; line-height: 1.2"
+							>
 								{{ currentStatus.label }}
 							</div>
 						</div>
 
-						<q-menu anchor="top left" self="bottom left" :offset="[0, 8]" class="status-menu" max-width="90vw">
+						<q-menu
+							anchor="top left"
+							self="bottom left"
+							:offset="[0, 8]"
+							class="status-menu"
+							max-width="90vw"
+						>
 							<q-list dense style="min-width: 180px">
 								<q-item
 									v-for="option in statusOptions"
@@ -331,7 +383,10 @@
 									active-class="bg-grey-9"
 									@click="setStatus(option.value)"
 								>
-									<q-item-section avatar style="min-width: 24px; padding-right: 0">
+									<q-item-section
+										avatar
+										style="min-width: 24px; padding-right: 0"
+									>
 										<span
 											class="status-dot status-dot--inline"
 											:style="{ backgroundColor: option.color }"
@@ -370,7 +425,12 @@
 							max-width="90vw"
 						>
 							<q-list dense style="min-width: 150px">
-								<q-item clickable v-close-popup @click="logout" class="text-red-4 hover-bg-grey-9">
+								<q-item
+									clickable
+									v-close-popup
+									@click="logout"
+									class="text-red-4 hover-bg-grey-9"
+								>
 									<q-item-section>Odhlásiť sa</q-item-section>
 									<q-item-section side>
 										<q-icon name="logout" size="xs" color="red-4" />
@@ -760,7 +820,12 @@ export default defineComponent({
 				return;
 			}
 
-			if (await showConfirm(`Naozaj chceš odísť zo servera "${serverName}"?`, 'Opustiť server')) {
+			if (
+				await showConfirm(
+					`Naozaj chceš odísť zo servera "${serverName}"?`,
+					'Opustiť server',
+				)
+			) {
 				if (!this.selectedServer) return;
 				if (Array.isArray(this.selectedServer.members)) {
 					this.selectedServer.members = this.selectedServer.members.filter(
@@ -803,7 +868,10 @@ export default defineComponent({
 						nextServ.channels[0]?.name ||
 						'všeobecný';
 					await this.$router.push('/' + nextChannel);
-					this.chatStore.addSystemMessage(nextChannel, `Opustil si server "${serverName}".`);
+					this.chatStore.addSystemMessage(
+						nextChannel,
+						`Opustil si server "${serverName}".`,
+					);
 				} else {
 					await this.$router.push('/');
 				}

@@ -1,4 +1,21 @@
-import { Notify } from 'quasar';
+import { AppVisibility, Notify } from 'quasar';
+
+/**
+ * Overí, či je aplikácia momentálne v stave "visible" podľa Quasar AppVisibility pluginu.
+ * @returns {boolean}
+ */
+export function isAppVisibleNow() {
+	if (typeof AppVisibility !== 'undefined' && typeof AppVisibility.appVisible === 'boolean') {
+		return AppVisibility.appVisible;
+	}
+	if (typeof document !== 'undefined') {
+		return (
+			document.visibilityState === 'visible' &&
+			(document.hasFocus ? document.hasFocus() : true)
+		);
+	}
+	return false;
+}
 
 /**
  * Zvukový ping pomocou Web Audio API (nie je potrebný externý .mp3 súbor).
@@ -53,47 +70,83 @@ export function isUserMentioned(text, username) {
 
 /**
  * Zobrazí vizuálne notifikácie a zahrá zvukový ping.
+ * - V stave "online" prichádza notifikácia na každú novú správu.
+ * - V stave "mentions" (Iba označenia) prichádza notifikácia iba pri @označení.
+/**
+ * Zobrazí vizuálne notifikácie a zahrá zvukový ping.
+ * - V stave "online" prichádza notifikácia na každú novú správu.
+ * - V stave "mentions" (Iba označenia) prichádza notifikácia iba pri @označení.
+ * - Notifikácia obsahuje meno odosielateľa, tím/server, kanál a text správy.
+ * - Zobrazuje Quasar Notify okno v rohu obrazovky a natívnu Windows notifikáciu.
  *
  * @param {string} channel
  * @param {{ id: number, author: string, text: string, time: string, isSystem?: boolean }} message
  * @param {boolean} [mentioned] true, ak správa obsahuje @zmienku pre aktuálneho používateľa
+ * @param {string} [teamName] názov tímu/servera
  */
-export function triggerPing(channel, message, mentioned = false) {
+export function triggerPing(channel, message, mentioned = false, teamName = '') {
 	if (message.isSystem) return;
 
 	// 1. Zvukové upozornenie
 	playPingSound();
 
-	// 2. Toast notifikácia v Quasar UI (@zmienka je zvýraznená inou farbou a ikonou)
+	const cleanChannel = String(channel || '').replace(/^#/, '');
+	const author = message.author || 'Neznámy';
+	const rawText = message.text || '';
+	const text = rawText.length > 30 ? rawText.slice(0, 30) + '...' : rawText;
+
+	const location = teamName ? `v tíme "${teamName}" (#${cleanChannel})` : `v #${cleanChannel}`;
+	const locationShort = teamName ? `[${teamName}] #${cleanChannel}` : `#${cleanChannel}`;
+
+	// 2. Quasar Notify vyskakovacie okno (toast) v rohu obrazovky
 	try {
 		Notify.create({
-			type: mentioned ? 'warning' : 'info',
-			color: mentioned ? 'amber-9' : 'primary',
-			textColor: mentioned ? 'black' : 'white',
+			type: 'warning',
+			color: 'amber-9',
+			textColor: 'black',
 			icon: mentioned ? 'alternate_email' : 'chat',
 			message: mentioned
-				? `${message.author} ťa označil v #${channel}`
-				: `Nová správa od ${message.author} v #${channel}`,
-			caption: message.text.length > 80 ? message.text.slice(0, 80) + '...' : message.text,
+				? `Používateľ ${author} ťa označil ${location}:`
+				: `Používateľ ${author} napísal správu ${location}:`,
+			caption: text || '(prázdna správa)',
 			position: 'top-right',
-			timeout: 4500,
+			timeout: 5000,
+			progress: true,
+			multiLine: true,
+			actions: [
+				{
+					icon: 'close',
+					color: 'black',
+					round: true,
+					dense: true,
+				},
+			],
 		});
-	} catch {
-		// ignore
+	} catch (err) {
+		console.error('Notify.create error:', err);
 	}
 
-	// 3. Natívna prehliadačová notifikácia (ak je povolená)
-	if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+	// 3. Natívna Windows / Desktop notifikácia prehliadača
+	const desktopEnabled =
+		typeof window !== 'undefined'
+			? localStorage.getItem('desktopNotificationsEnabled') !== 'false'
+			: true;
+
+	if (
+		desktopEnabled &&
+		typeof Notification !== 'undefined' &&
+		Notification.permission === 'granted'
+	) {
 		try {
 			const title = mentioned
-				? `${message.author} ťa označil v #${channel}`
-				: `${message.author} v #${channel}`;
+				? `Používateľ ${author} ťa označil (${locationShort})`
+				: `Používateľ ${author} napísal správu (${locationShort})`;
 			new Notification(title, {
-				body: message.text,
+				body: text || '(prázdna správa)',
 				icon: '/favicon.ico',
 			});
-		} catch {
-			// ignore
+		} catch (err) {
+			console.error('Desktop notification error:', err);
 		}
 	}
 }

@@ -18,7 +18,10 @@
 				color="grey-5"
 				class="q-mr-sm"
 			/>
-			<q-toolbar-title class="text-weight-bold row items-center no-wrap ellipsis" style="font-size: 1rem">
+			<q-toolbar-title
+				class="text-weight-bold row items-center no-wrap ellipsis"
+				style="font-size: 1rem"
+			>
 				<span class="ellipsis">#{{ channelName }}</span>
 				<q-badge
 					v-if="currentChannel"
@@ -27,8 +30,12 @@
 				>
 					{{ currentChannel.type === 'private' ? 'Súkromný' : 'Verejný' }}
 				</q-badge>
-				<span v-if="currentChannel" class="text-caption text-grey-5 q-ml-md gt-sm row items-center">
-					Správca kanála: <span class="text-grey-3 q-mx-xs">{{ currentChannel.admin }}</span>
+				<span
+					v-if="currentChannel"
+					class="text-caption text-grey-5 q-ml-md gt-sm row items-center"
+				>
+					Správca kanála:
+					<span class="text-grey-3 q-mx-xs">{{ currentChannel.admin }}</span>
 					<q-badge
 						v-if="isChannelAdmin"
 						color="positive"
@@ -38,8 +45,12 @@
 						Vy
 					</q-badge>
 				</span>
-				<span v-if="currentServer" class="text-caption text-grey-5 q-ml-md gt-sm row items-center">
-					Vlastník servera: <span class="text-grey-3 q-mx-xs">{{ currentServer.admin }}</span>
+				<span
+					v-if="currentServer"
+					class="text-caption text-grey-5 q-ml-md gt-sm row items-center"
+				>
+					Vlastník servera:
+					<span class="text-grey-3 q-mx-xs">{{ currentServer.admin }}</span>
 					<q-badge
 						v-if="isServerOwner"
 						color="amber-9"
@@ -72,8 +83,8 @@
 				class="q-mr-xs"
 				:title="
 					notificationsEnabled
-						? 'Desktop notifikácie sú aktívne'
-						: 'Povoliť desktopové notifikácie a pingy'
+						? 'Desktop notifikácie sú zapnuté (kliknutím vypnete)'
+						: 'Kliknutím zapnete desktop notifikácie'
 				"
 				@click="toggleDesktopNotifications"
 			/>
@@ -96,12 +107,20 @@
 			class="col flex flex-center bg-discord-main text-white q-pa-md text-center"
 		>
 			<div class="column items-center q-pa-sm" style="max-width: 480px">
-				<q-avatar size="64px" color="red-10" text-color="red-2" icon="lock" class="q-mb-md" />
-				<div class="text-h6 text-sm-h5 text-weight-bold q-mb-sm">Prístup do kanála je obmedzený</div>
+				<q-avatar
+					size="64px"
+					color="red-10"
+					text-color="red-2"
+					icon="lock"
+					class="q-mb-md"
+				/>
+				<div class="text-h6 text-sm-h5 text-weight-bold q-mb-sm">
+					Prístup do kanála je obmedzený
+				</div>
 				<div class="text-grey-5 q-mb-md text-body2">
-					Kanál <strong>#{{ channelName }}</strong> je súkromný alebo k nemu nemáš prístup. Nemáš
-					oprávnenie na zobrazenie správ ani na odosielanie obsahu. Prístup ti môže udeliť iba
-					správca kanála pozvánkou.
+					Kanál <strong>#{{ channelName }}</strong> je súkromný alebo k nemu nemáš
+					prístup. Nemáš oprávnenie na zobrazenie správ ani na odosielanie obsahu. Prístup
+					ti môže udeliť iba správca kanála pozvánkou.
 				</div>
 				<q-btn
 					color="primary"
@@ -143,7 +162,9 @@
 				style="border-bottom: 1px solid #1e1f22"
 			>
 				<q-icon name="block" size="xs" class="q-mr-sm" />
-				<span class="text-caption">V tomto kanáli máš trvalý ban. Správy nemôžeš odosielať.</span>
+				<span class="text-caption"
+					>V tomto kanáli máš trvalý ban. Správy nemôžeš odosielať.</span
+				>
 			</div>
 
 			<!-- Main Chat Body with Optional Members Sidebar -->
@@ -151,7 +172,10 @@
 				<!-- Left: Chat Messages Area + Input Area -->
 				<div class="column col" style="min-height: 0">
 					<!-- Chat Messages Area -->
-					<q-scroll-area ref="chatScroll" class="col q-pa-md bg-discord-main chat-scroll-content">
+					<q-scroll-area
+						ref="chatScroll"
+						class="col q-pa-md bg-discord-main chat-scroll-content"
+					>
 						<!-- Infinite scroll: staršie správy sa dočítavajú po stránkach pri scrolle hore -->
 						<q-infinite-scroll
 							reverse
@@ -182,7 +206,8 @@
 									Vitaj v #{{ channelName }}!
 								</div>
 								<div class="text-grey-5 text-caption text-sm-body2">
-									Toto je začiatok histórie tohto kanála. Príkazy zadávaj cez príkazový riadok dole.
+									Toto je začiatok histórie tohto kanála. Príkazy zadávaj cez
+									príkazový riadok dole.
 								</div>
 							</div>
 
@@ -200,7 +225,11 @@
 									<q-avatar
 										size="40px"
 										:color="
-											msg.isSystem ? 'amber-9' : isMessageMentioned(msg) ? 'amber-8' : 'primary'
+											msg.isSystem
+												? 'amber-9'
+												: isMessageMentioned(msg)
+													? 'amber-8'
+													: 'primary'
 										"
 										text-color="white"
 										:icon="msg.isSystem ? 'terminal' : undefined"
@@ -228,11 +257,17 @@
 														: 'text-white'
 											"
 											@click="insertMention(msg.author)"
-											:title="msg.isSystem ? undefined : `Klikni pre označenie @${msg.author}`"
+											:title="
+												msg.isSystem
+													? undefined
+													: `Klikni pre označenie @${msg.author}`
+											"
 										>
 											{{ msg.author }}
 										</span>
-										<span class="text-grey-5 text-caption">Dnes o {{ msg.time }}</span>
+										<span class="text-grey-5 text-caption"
+											>Dnes o {{ msg.time }}</span
+										>
 										<q-badge
 											v-if="isMessageMentioned(msg)"
 											color="amber-8"
@@ -259,7 +294,9 @@
 							v-if="mentionSuggestions.length > 0"
 							class="mention-chips-bar row no-wrap items-center q-gutter-xs q-mb-xs q-px-xs"
 						>
-							<span class="text-caption text-grey-5 q-mr-xs flex-shrink-0">Označiť:</span>
+							<span class="text-caption text-grey-5 q-mr-xs flex-shrink-0"
+								>Označiť:</span
+							>
 							<q-chip
 								v-for="user in mentionSuggestions"
 								:key="user"
@@ -309,28 +346,44 @@
 									@click="sendMessage"
 									title="Odoslať správu / príkaz"
 								/>
-								<q-btn flat round dense icon="emoji_emotions" color="grey-5" class="gt-xs" />
+								<q-btn
+									flat
+									round
+									dense
+									icon="emoji_emotions"
+									color="grey-5"
+									class="gt-xs"
+								/>
 							</template>
 						</q-input>
 
 						<!-- Typing indicator -->
 						<div class="typing-bar row items-center no-wrap ellipsis q-px-xs">
 							<transition name="typing-fade">
-								<div v-if="typingText" class="row items-center text-caption text-grey-4">
+								<div
+									v-if="typingText"
+									class="row items-center text-caption text-grey-4"
+								>
 									<span class="typing-dots q-mr-xs">
 										<span class="dot"></span>
 										<span class="dot"></span>
 										<span class="dot"></span>
 									</span>
-									<template v-for="(user, index) in typingDisplayUsers" :key="user">
+									<template
+										v-for="(user, index) in typingDisplayUsers"
+										:key="user"
+									>
 										<span v-if="index > 0" class="q-mr-xs">{{
-											index === typingDisplayUsers.length - 1 && typingOtherUsers.length === 0
+											index === typingDisplayUsers.length - 1 &&
+											typingOtherUsers.length === 0
 												? ' and'
 												: ','
 										}}</span>
 										<span
 											class="text-weight-bold text-white typing-name"
-											:class="{ 'q-mr-xs': index === typingDisplayUsers.length - 1 }"
+											:class="{
+												'q-mr-xs': index === typingDisplayUsers.length - 1,
+											}"
 											:title="`Klikni pre náhľad textu, ktorý ${user} píše`"
 											@click="openTypingPreview(user)"
 										>
@@ -378,13 +431,17 @@
 								</q-avatar>
 								<span
 									class="status-dot"
-									:style="{ backgroundColor: statusOption(typingPreviewUser).color }"
+									:style="{
+										backgroundColor: statusOption(typingPreviewUser).color,
+									}"
 								/>
 							</div>
 							<div class="col" style="min-width: 0">
 								<div class="text-weight-bold ellipsis">{{ typingPreviewUser }}</div>
 								<div class="text-caption text-grey-5">
-									{{ previewIsTyping ? 'práve píše' : 'nepíše' }} v #{{ channelName }}
+									{{ previewIsTyping ? 'práve píše' : 'nepíše' }} v #{{
+										channelName
+									}}
 								</div>
 							</div>
 							<q-btn flat round dense icon="close" color="grey-5" v-close-popup />
@@ -451,19 +508,28 @@
 							>
 								<q-item-section avatar style="min-width: 36px; padding-right: 8px">
 									<div class="avatar-wrapper">
-										<q-avatar size="28px" color="amber-9" text-color="black" class="text-weight-bold">
+										<q-avatar
+											size="28px"
+											color="amber-9"
+											text-color="black"
+											class="text-weight-bold"
+										>
 											{{ channelAdmin.charAt(0).toUpperCase() }}
 										</q-avatar>
 										<span
 											class="status-dot"
-											:style="{ backgroundColor: statusOption(channelAdmin).color }"
+											:style="{
+												backgroundColor: statusOption(channelAdmin).color,
+											}"
 											:title="statusOption(channelAdmin).label"
 										/>
 									</div>
 								</q-item-section>
 								<q-item-section>
 									<div class="row items-center no-wrap">
-										<span class="text-weight-bold text-amber-3 ellipsis">{{ channelAdmin }}</span>
+										<span class="text-weight-bold text-amber-3 ellipsis">{{
+											channelAdmin
+										}}</span>
 										<q-icon
 											name="stars"
 											size="14px"
@@ -514,7 +580,12 @@
 							>
 								<q-item-section avatar style="min-width: 36px; padding-right: 8px">
 									<div class="avatar-wrapper">
-										<q-avatar size="28px" color="primary" text-color="white" class="text-weight-bold">
+										<q-avatar
+											size="28px"
+											color="primary"
+											text-color="white"
+											class="text-weight-bold"
+										>
 											{{ member.charAt(0).toUpperCase() }}
 										</q-avatar>
 										<span
@@ -548,7 +619,10 @@
 										</q-badge>
 									</div>
 									<div class="text-caption text-grey-5" style="font-size: 11px">
-										{{ isServerOwnerName(member) ? 'Vlastník servera' : 'Člen' }} •
+										{{
+											isServerOwnerName(member) ? 'Vlastník servera' : 'Člen'
+										}}
+										•
 										{{ statusOption(member).label }}
 									</div>
 								</q-item-section>
@@ -556,7 +630,10 @@
 
 							<!-- Pozvaní do súkromného kanála (ak existujú) -->
 							<template v-if="invitedMembers.length > 0">
-								<div class="text-overline text-grey-5 q-px-md q-pt-sm" style="font-size: 10px">
+								<div
+									class="text-overline text-grey-5 q-px-md q-pt-sm"
+									style="font-size: 10px"
+								>
 									POZVANÍ — {{ invitedMembers.length }}
 								</div>
 								<q-item
@@ -564,14 +641,20 @@
 									:key="member"
 									class="member-item member-item--invited rounded-borders q-mx-xs q-mb-xs"
 								>
-									<q-item-section avatar style="min-width: 36px; padding-right: 8px">
+									<q-item-section
+										avatar
+										style="min-width: 36px; padding-right: 8px"
+									>
 										<q-avatar size="28px" color="grey-8" text-color="grey-5">
 											{{ member.charAt(0).toUpperCase() }}
 										</q-avatar>
 									</q-item-section>
 									<q-item-section>
 										<span class="text-grey-5 ellipsis">{{ member }}</span>
-										<div class="text-caption text-grey-6" style="font-size: 10px">
+										<div
+											class="text-caption text-grey-6"
+											style="font-size: 10px"
+										>
 											Čaká na vstup
 										</div>
 									</q-item-section>
@@ -590,7 +673,9 @@
 							size="xs"
 							class="q-mr-xs"
 						/>
-						{{ currentChannel?.type === 'private' ? 'Súkromný kanál' : 'Verejný kanál' }}
+						{{
+							currentChannel?.type === 'private' ? 'Súkromný kanál' : 'Verejný kanál'
+						}}
 					</div>
 				</div>
 			</div>
@@ -781,7 +866,9 @@ export default defineComponent({
 		},
 
 		mentionSuggestions(): string[] {
-			const match = this.newMessage.match(/@([a-zA-Z0-9_áäčďéíĺľňóôŕšťúýžÁÄČĎÉÍĹĽŇÓÔŔŠŤÚÝŽ-]*)$/);
+			const match = this.newMessage.match(
+				/@([a-zA-Z0-9_áäčďéíĺľňóôŕšťúýžÁÄČĎÉÍĹĽŇÓÔŔŠŤÚÝŽ-]*)$/,
+			);
 			if (!match) return [];
 			const query = (match[1] || '').toLowerCase();
 			const members = this.currentChannel?.members || ['denis', 'jakub'];
@@ -816,7 +903,10 @@ export default defineComponent({
 		this.scrollToBottom();
 
 		if (typeof Notification !== 'undefined') {
-			this.notificationsEnabled = Notification.permission === 'granted';
+			const explicitlyDisabled =
+				localStorage.getItem('desktopNotificationsEnabled') === 'false';
+			this.notificationsEnabled =
+				Notification.permission === 'granted' && !explicitlyDisabled;
 		}
 	},
 
@@ -941,7 +1031,10 @@ export default defineComponent({
 
 		quickJoin() {
 			if (!this.hasAccess) return;
-			const res = this.chatStore.executeCommand(this.channelName, `/join ${this.channelName}`);
+			const res = this.chatStore.executeCommand(
+				this.channelName,
+				`/join ${this.channelName}`,
+			);
 			this.chatStore.addSystemMessage(this.channelName, res.message);
 			if (res.redirectUrl) {
 				void this.$router.push(res.redirectUrl);
@@ -1011,8 +1104,56 @@ export default defineComponent({
 		},
 
 		async toggleDesktopNotifications() {
-			const granted = await requestNotificationPermission();
-			this.notificationsEnabled = granted;
+			if (typeof Notification === 'undefined') {
+				this.$q.notify({
+					type: 'warning',
+					message: 'Váš prehliadač nepodporuje desktop notifikácie.',
+					position: 'top',
+				});
+				return;
+			}
+
+			if (Notification.permission === 'granted') {
+				this.notificationsEnabled = !this.notificationsEnabled;
+				localStorage.setItem(
+					'desktopNotificationsEnabled',
+					String(this.notificationsEnabled),
+				);
+				this.$q.notify({
+					type: this.notificationsEnabled ? 'positive' : 'info',
+					icon: this.notificationsEnabled ? 'notifications_active' : 'notifications_off',
+					message: this.notificationsEnabled
+						? 'Desktop notifikácie boli zapnuté!'
+						: 'Desktop notifikácie boli vypnuté.',
+					position: 'top',
+					timeout: 2500,
+				});
+
+				if (this.notificationsEnabled) {
+					try {
+						new Notification('Notifikácie sú aktívne', {
+							body: 'Windows notifikácie pre Quasar chat fungujú správne.',
+							icon: '/favicon.ico',
+						});
+					} catch {
+						// ignore
+					}
+				}
+			} else {
+				const granted = await requestNotificationPermission();
+				this.notificationsEnabled = granted;
+				localStorage.setItem('desktopNotificationsEnabled', String(granted));
+				if (granted) {
+					try {
+						new Notification('Notifikácie sú aktívne', {
+							body: 'Windows notifikácie pre Quasar chat fungujú správne.',
+							icon: '/favicon.ico',
+						});
+					} catch {
+						// ignore
+					}
+				}
+			}
 		},
 
 		isSameUser(u1: string, u2: string): boolean {

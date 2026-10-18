@@ -2,6 +2,7 @@
 
 # Tím:
 Denis Gaál - deno555
+
 Jakub Chmura - ChmuraJakub/AutWorld
 
 # Github repozitár:

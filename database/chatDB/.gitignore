@@ -1,0 +1,7 @@
+# Local secrets
+.env
+!.env.example
+
+# Docker / MySQL local files
+*.log
+

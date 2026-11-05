@@ -4,10 +4,17 @@ import type { HttpContext } from '@adonisjs/core/http'
 import UserTransformer from '#transformers/user_transformer'
 
 export default class AccessTokensController {
-  async store({ request, serialize }: HttpContext) {
-    const { email, password } = await request.validateUsing(loginValidator)
+  async store({ request, response, serialize }: HttpContext) {
+    const payload = await request.validateUsing(loginValidator)
+    const identifier = payload.uid || payload.email || payload.username
 
-    const user = await User.verifyCredentials(email, password)
+    if (!identifier) {
+      return response.badRequest({
+        errors: [{ message: 'Email alebo prezývka je povinná.' }],
+      })
+    }
+
+    const user = await User.verifyCredentials(identifier, payload.password)
     const token = await User.accessTokens.create(user)
 
     return serialize({

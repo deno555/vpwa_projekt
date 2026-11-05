@@ -26,5 +26,6 @@ https://github.com/deno555/vpwa_projekt
 - **`@adonisjs/core` (7.5.1):** Hlavný MVC backendový TypeScript framework (HTTP server, routing, dependency injection).
 - **`@adonisjs/auth` (10.1.0):** Autentifikácia používateľov, hashovanie hesiel a správa access tokenov.
 - **`@adonisjs/lucid` (22.4.2):** ORM a migračný systém pre prácu s databázovými modelmi.
+- **`mysql2` (3.24.6):** Databázový driver pre MySQL / MariaDB.
 - **`@adonisjs/cors` (3.0.0):** CORS middleware pre komunikáciu s frontendom.
 - **`@adonisjs/session` (8.1.0) & `@adonisjs/shield` (9.0.0):** Správa sessions a bezpečnosť aplikácie.

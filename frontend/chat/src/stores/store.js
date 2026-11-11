@@ -75,9 +75,6 @@ export const useAuthStore = defineStore('auth', {
 		user: null,
 		/** @type {string | null} */
 		token: getStoredToken(),
-		/** Overené prezývky z backendu (malé písmená -> presná prezývka) */
-		/** @type {Record<string, string>} */
-		knownUsers: {},
 		initialized: false,
 	}),
 	getters: {
@@ -116,7 +113,6 @@ export const useAuthStore = defineStore('auth', {
 		/** @param {User} user */
 		setUser(user) {
 			this.user = user;
-			this.knownUsers[user.nickname.toLowerCase()] = user.nickname;
 		},
 
 		clearSession() {
@@ -177,42 +173,15 @@ export const useAuthStore = defineStore('auth', {
 				this.clearSession();
 			}
 		},
-
-		/**
-		 * Overí na backende, či používateľ s danou prezývkou existuje.
-		 * @param {string} nick
-		 * @returns {Promise<string | null>} presná prezývka alebo null
-		 */
-		async fetchUser(nick) {
-			const key = nick.trim().toLowerCase();
-			if (!key) return null;
-			if (this.knownUsers[key]) return this.knownUsers[key];
-			try {
-				const res = await apiRequest(`/users/${encodeURIComponent(nick.trim())}`);
-				this.knownUsers[key] = res.data.nickname;
-				return res.data.nickname;
-			} catch {
-				return null;
-			}
-		},
 	},
 });
-
-/**
- * Nájde prezývku používateľa overeného cez backend (bez ohľadu na veľkosť písmen).
- * @param {string} nick
- * @returns {string | null}
- */
-function findKnownNick(nick) {
-	return useAuthStore().knownUsers[nick.trim().toLowerCase()] || null;
-}
-
-/** Príkazy, ktorých argument je prezývka existujúceho používateľa */
-const COMMANDS_WITH_USER = ['invite', 'kick'];
 
 // --- Správy, Servery a Kanály ---
 
 /**
+ * Tímy (servery) a kanály spravuje backend (/api/v1/teams, /api/v1/channels).
+ * Správy sú zatiaľ uložené lokálne v prehliadači.
+ *
  * @typedef {{ id: number, author: string, text: string, time: string, isSystem?: boolean }} Message
  * @typedef {{
  *   id: number,
@@ -223,7 +192,7 @@ const COMMANDS_WITH_USER = ['invite', 'kick'];
  *   invited: string[],
  *   banned: string[],
  *   kicks: Record<string, string[]>,
- *   lastActivity?: number
+ *   lastActivity: number
  * }} Channel
  * @typedef {{
  *   id: number,
@@ -233,9 +202,10 @@ const COMMANDS_WITH_USER = ['invite', 'kick'];
  *   members: string[],
  *   channels: Channel[]
  * }} Server
+ * @typedef {{ success: boolean, message: string, redirectUrl?: string, newServerId?: number }} CommandResult
  */
 
-// Kanál bez novej správy dlhšie ako 30 dní zaniká
+// Kanál bez novej správy dlhšie ako 30 dní zaniká (stráži backend)
 export const CHANNEL_INACTIVITY_LIMIT_MS = 30 * 24 * 60 * 60 * 1000;
 
 function currentTime() {
@@ -254,233 +224,6 @@ function welcomeMessage(channel) {
 		time: currentTime(),
 		isSystem: true,
 	};
-}
-
-/** @type {Server[]} */
-const INITIAL_SERVERS = [
-	{
-		id: 1,
-		name: 'Dev Tím',
-		type: 'public',
-		admin: 'denis',
-		members: ['denis', 'jakub'],
-		channels: [
-			{
-				id: 1,
-				name: 'všeobecný',
-				type: 'public',
-				admin: 'denis',
-				members: ['denis', 'jakub'],
-				invited: [],
-				banned: [],
-				kicks: {},
-			},
-			{
-				id: 2,
-				name: 'tajný-vývoj',
-				type: 'private',
-				admin: 'denis',
-				members: ['denis'],
-				invited: [],
-				banned: [],
-				kicks: {},
-			},
-			{
-				id: 3,
-				name: 'nová-kampaň',
-				type: 'public',
-				admin: 'jakub',
-				members: ['jakub'],
-				invited: ['denis'],
-				banned: [],
-				kicks: {},
-			},
-			{
-				id: 4,
-				name: 'off-topic',
-				type: 'public',
-				admin: 'denis',
-				members: ['denis', 'jakub'],
-				invited: [],
-				banned: [],
-				kicks: {},
-			},
-			{
-				id: 15,
-				name: 'komunita',
-				type: 'public',
-				admin: 'denis',
-				members: ['denis'],
-				invited: [],
-				banned: [],
-				kicks: {},
-			},
-		],
-	},
-	{
-		id: 2,
-		name: 'Škola',
-		type: 'public',
-		admin: 'jakub',
-		members: ['denis', 'jakub'],
-		channels: [
-			{
-				id: 5,
-				name: 'oznamy',
-				type: 'public',
-				admin: 'jakub',
-				members: ['denis', 'jakub'],
-				invited: [],
-				banned: [],
-				kicks: {},
-			},
-			{
-				id: 6,
-				name: 'vpwa',
-				type: 'public',
-				admin: 'denis',
-				members: ['denis', 'jakub'],
-				invited: [],
-				banned: [],
-				kicks: {},
-			},
-			{
-				id: 7,
-				name: 'projekt-tím',
-				type: 'private',
-				admin: 'jakub',
-				members: ['jakub'],
-				invited: [],
-				banned: [],
-				kicks: {},
-			},
-		],
-	},
-	{
-		id: 3,
-		name: 'Gaming',
-		type: 'public',
-		admin: 'denis',
-		members: ['denis', 'jakub'],
-		channels: [
-			{
-				id: 8,
-				name: 'lobby',
-				type: 'public',
-				admin: 'denis',
-				members: ['denis', 'jakub'],
-				invited: [],
-				banned: [],
-				kicks: {},
-			},
-			{
-				id: 9,
-				name: 'turnaj',
-				type: 'public',
-				admin: 'jakub',
-				members: ['jakub'],
-				invited: ['denis'],
-				banned: [],
-				kicks: {},
-			},
-			{
-				id: 10,
-				name: 'clips',
-				type: 'public',
-				admin: 'denis',
-				members: ['denis', 'jakub'],
-				invited: [],
-				banned: [],
-				kicks: {},
-			},
-		],
-	},
-	{
-		id: 4,
-		name: 'Muzika',
-		type: 'public',
-		admin: 'denis',
-		members: ['denis'],
-		channels: [
-			{
-				id: 11,
-				name: 'odporúčania',
-				type: 'public',
-				admin: 'denis',
-				members: ['denis'],
-				invited: [],
-				banned: [],
-				kicks: {},
-			},
-			{
-				id: 12,
-				name: 'playlisty',
-				type: 'public',
-				admin: 'denis',
-				members: ['denis'],
-				invited: [],
-				banned: [],
-				kicks: {},
-			},
-		],
-	},
-	{
-		id: 5,
-		name: 'Anime Klub',
-		type: 'public',
-		admin: 'jakub',
-		members: ['jakub'],
-		channels: [
-			{
-				id: 13,
-				name: 'diskusia',
-				type: 'public',
-				admin: 'jakub',
-				members: ['jakub'],
-				invited: [],
-				banned: [],
-				kicks: {},
-			},
-			{
-				id: 14,
-				name: 'spoilery',
-				type: 'private',
-				admin: 'jakub',
-				members: ['jakub'],
-				invited: [],
-				banned: [],
-				kicks: {},
-			},
-		],
-	},
-];
-
-function loadStoredServers() {
-	const saved = localStorage.getItem('chatServers');
-	const version = localStorage.getItem('chatDataVersion');
-	const CURRENT_VERSION = '3';
-	if (!saved || version !== CURRENT_VERSION) {
-		localStorage.setItem('chatDataVersion', CURRENT_VERSION);
-		localStorage.setItem('chatServers', JSON.stringify(INITIAL_SERVERS));
-		return INITIAL_SERVERS;
-	}
-	try {
-		const list = JSON.parse(saved);
-		for (const s of list) {
-			if (!Array.isArray(s.members)) {
-				s.members = [s.admin];
-			}
-			for (const c of s.channels || []) {
-				if (!Array.isArray(c.members)) c.members = [c.admin];
-				if (!Array.isArray(c.invited)) c.invited = [];
-				if (!Array.isArray(c.banned)) c.banned = [];
-				if (!c.kicks) c.kicks = {};
-			}
-		}
-		return list;
-	} catch {
-		return INITIAL_SERVERS;
-	}
 }
 
 /** @returns {Record<string, Message[]>} */
@@ -507,7 +250,36 @@ function persistHistory(history) {
 	localStorage.setItem('chatHistory', JSON.stringify(merged));
 }
 
-const savedSelectedServerId = localStorage.getItem('chatSelectedServerId');
+function loadSelectedServerId() {
+	const saved = typeof window !== 'undefined' ? localStorage.getItem('chatSelectedServerId') : null;
+	return saved ? Number(saved) : null;
+}
+
+/**
+ * Prvý kanál servera, kam má zmysel používateľa presmerovať
+ * (členstvo -> pozvánka -> verejný bez banu).
+ * @param {Server | null | undefined} server
+ * @param {string} username
+ * @returns {string | null}
+ */
+export function firstChannelFor(server, username) {
+	const channels = server?.channels || [];
+	const notBanned = (/** @type {Channel} */ c) => !userListIncludes(c.banned, username);
+	return (
+		channels.find((c) => userListIncludes(c.members, username) && notBanned(c))?.name ||
+		channels.find((c) => userListIncludes(c.invited, username) && notBanned(c))?.name ||
+		channels.find((c) => c.type === 'public' && notBanned(c))?.name ||
+		null
+	);
+}
+
+/**
+ * @param {unknown} e
+ * @returns {CommandResult}
+ */
+function failure(e) {
+	return { success: false, message: e instanceof Error ? e.message : 'Akcia zlyhala.' };
+}
 
 let bc = null;
 if (typeof window !== 'undefined' && typeof window.BroadcastChannel !== 'undefined') {
@@ -515,6 +287,16 @@ if (typeof window !== 'undefined' && typeof window.BroadcastChannel !== 'undefin
 		bc = new BroadcastChannel('vpwa_chat_sync');
 	} catch {
 		bc = null;
+	}
+}
+
+/** @param {Record<string, unknown>} data */
+function broadcast(data) {
+	if (!bc) return;
+	try {
+		bc.postMessage(data);
+	} catch {
+		// ignore
 	}
 }
 
@@ -527,10 +309,10 @@ export const useChatStore = defineStore('chat', {
 		/** @type {Record<string, Record<string, string>>} */
 		typingTexts: {},
 		/** @type {Server[]} */
-		servers: loadStoredServers(),
-		selectedServerId: savedSelectedServerId
-			? Number(savedSelectedServerId)
-			: INITIAL_SERVERS[0].id,
+		servers: [],
+		serversLoaded: false,
+		/** @type {number | null} */
+		selectedServerId: loadSelectedServerId(),
 		/** @type {Record<string, UserStatus>} */
 		userStatuses: loadStoredStatuses(),
 		/** @type {boolean} */
@@ -550,34 +332,13 @@ export const useChatStore = defineStore('chat', {
 			if (!current) return 'offline';
 			return state.userStatuses[statusKey(current)] || 'online';
 		},
-		visibleServers: (state) => {
-			const auth = useAuthStore();
-			const currentUser = auth.currentUser;
-			if (!currentUser) return [];
-			return state.servers.filter((s) => {
-				return isSameUser(s.admin, currentUser) || userListIncludes(s.members, currentUser);
-			});
-		},
-		currentServer: (state) => {
-			const auth = useAuthStore();
-			const currentUser = auth.currentUser;
-			const accessible = state.servers.filter((s) => {
-				if (!currentUser) return true;
-				return isSameUser(s.admin, currentUser) || userListIncludes(s.members, currentUser);
-			});
-			const found = accessible.find((s) => s.id === state.selectedServerId);
-			return (
-				found ||
-				accessible[0] ||
-				state.servers.find((s) => s.id === state.selectedServerId) ||
-				state.servers[0] ||
-				INITIAL_SERVERS[0]
-			);
-		},
-		currentChannels: (state) => {
-			const server =
-				state.servers.find((s) => s.id === state.selectedServerId) || state.servers[0];
-			return server ? server.channels : [];
+		/** Backend vracia iba servery, ktorých je používateľ členom */
+		visibleServers: (state) => state.servers,
+		/** @returns {Server | null} */
+		currentServer: (state) =>
+			state.servers.find((s) => s.id === state.selectedServerId) || state.servers[0] || null,
+		currentChannels() {
+			return this.currentServer ? this.currentServer.channels : [];
 		},
 		messagesFor: (state) => (/** @type {string} */ channel) =>
 			state.history[channel] || [welcomeMessage(channel)],
@@ -616,96 +377,90 @@ export const useChatStore = defineStore('chat', {
 				userListIncludes(channel.invited, username)
 			);
 		},
-		findChannelByName: (state) => (/** @type {string} */ channelName) => {
-			const name = String(channelName || '')
-				.toLowerCase()
-				.replace(/^#/, '');
-			const auth = useAuthStore();
-			const currentUser = auth.currentUser;
-			// 1. Skontrolujeme aktuálne vybraný server
-			const curServer = state.servers.find((s) => s.id === state.selectedServerId);
-			if (curServer) {
-				const foundInCur = curServer.channels.find((c) => c.name.toLowerCase() === name);
-				if (foundInCur) return { channel: foundInCur, server: curServer };
-			}
-			// 2. Skontrolujeme dostupné servery používateľa
-			const accessible = state.servers.filter((s) => {
-				if (!currentUser) return true;
-				return isSameUser(s.admin, currentUser) || userListIncludes(s.members, currentUser);
-			});
-			for (const server of accessible) {
-				const found = server.channels.find((c) => c.name.toLowerCase() === name);
-				if (found) return { channel: found, server };
-			}
-			// 3. Fallback na všetky servery
-			for (const server of state.servers) {
-				const found = server.channels.find((c) => c.name.toLowerCase() === name);
-				if (found) return { channel: found, server };
-			}
-			return null;
+		/**
+		 * Kanál podľa názvu – najprv v aktuálnom serveri, potom v ostatných.
+		 * @returns {(channelName: string) => { channel: Channel, server: Server } | null}
+		 */
+		findChannelByName() {
+			return (channelName) => {
+				const name = String(channelName || '')
+					.toLowerCase()
+					.replace(/^#/, '');
+				const current = this.currentServer;
+				const ordered = current
+					? [current, ...this.servers.filter((s) => s.id !== current.id)]
+					: this.servers;
+				for (const server of ordered) {
+					const found = server.channels.find((c) => c.name.toLowerCase() === name);
+					if (found) return { channel: found, server };
+				}
+				return null;
+			};
 		},
-		isMember:
-			(state) => (/** @type {string} */ channelName, /** @type {string} */ username) => {
-				const name = String(channelName || '')
-					.toLowerCase()
-					.replace(/^#/, '');
-				// Najprv skontrolujeme aktuálne vybraný server!
-				const curServer = state.servers.find((s) => s.id === state.selectedServerId);
-				if (curServer) {
-					const found = curServer.channels.find((c) => c.name.toLowerCase() === name);
-					if (found) {
-						return userListIncludes(found.members, username);
-					}
-				}
-				for (const server of state.servers) {
-					const found = server.channels.find((c) => c.name.toLowerCase() === name);
-					if (found) {
-						return userListIncludes(found.members, username);
-					}
-				}
-				return false;
-			},
-		isBanned:
-			(state) => (/** @type {string} */ channelName, /** @type {string} */ username) => {
-				const name = String(channelName || '')
-					.toLowerCase()
-					.replace(/^#/, '');
-				const curServer = state.servers.find((s) => s.id === state.selectedServerId);
-				if (curServer) {
-					const found = curServer.channels.find((c) => c.name.toLowerCase() === name);
-					if (found) {
-						return userListIncludes(found.banned, username);
-					}
-				}
-				for (const server of state.servers) {
-					const found = server.channels.find((c) => c.name.toLowerCase() === name);
-					if (found) {
-						return userListIncludes(found.banned, username);
-					}
-				}
-				return false;
-			},
+		isMember() {
+			return (/** @type {string} */ channelName, /** @type {string} */ username) => {
+				const info = this.findChannelByName(channelName);
+				return !!info && userListIncludes(info.channel.members, username);
+			};
+		},
+		isBanned() {
+			return (/** @type {string} */ channelName, /** @type {string} */ username) => {
+				const info = this.findChannelByName(channelName);
+				return !!info && userListIncludes(info.channel.banned, username);
+			};
+		},
 	},
 	actions: {
-		saveServers() {
-			localStorage.setItem('chatServers', JSON.stringify(this.servers));
-			localStorage.setItem('chatSelectedServerId', String(this.selectedServerId));
-			if (bc) {
-				try {
-					bc.postMessage({
-						type: 'servers_updated',
-						servers: this.servers,
-						selectedServerId: this.selectedServerId,
-					});
-				} catch {
-					// ignore
-				}
+		/**
+		 * Načíta servery a kanály prihláseného používateľa z backendu.
+		 * Kanály, ktoré medzitým zanikli pre neaktivitu, oznámi layoutu.
+		 */
+		async loadServers() {
+			const res = await apiRequest('/teams');
+			/** @type {Server[]} */
+			const servers = res.data;
+
+			if (this.serversLoaded) {
+				const limit = Date.now() - CHANNEL_INACTIVITY_LIMIT_MS;
+				const stillThere = new Set(servers.flatMap((s) => s.channels.map((c) => c.id)));
+				const expired = this.servers
+					.flatMap((s) => s.channels)
+					.filter((c) => !stillThere.has(c.id) && c.lastActivity < limit)
+					.map((c) => c.name);
+				this.servers = servers;
+				if (expired.length > 0) this.applyExpiredChannels(expired);
+			} else {
+				this.servers = servers;
+			}
+
+			this.serversLoaded = true;
+			if (!servers.some((s) => s.id === this.selectedServerId)) {
+				this.selectedServerId = servers[0]?.id ?? null;
 			}
 		},
 
+		/** Po odhlásení zahodí dáta predchádzajúceho používateľa */
+		resetServers() {
+			this.servers = [];
+			this.serversLoaded = false;
+		},
+
+		/**
+		 * Po zmene na backende načíta nový stav a oznámi to ostatným kartám.
+		 */
+		async refreshServers() {
+			try {
+				await this.loadServers();
+			} catch {
+				// ignore – ďalší pokus príde pri najbližšom obnovení
+			}
+			broadcast({ type: 'servers_changed' });
+		},
+
+		/** @param {number} serverId */
 		selectServer(serverId) {
 			this.selectedServerId = serverId;
-			this.saveServers();
+			localStorage.setItem('chatSelectedServerId', String(serverId));
 		},
 
 		toggleLeftDrawer() {
@@ -730,13 +485,7 @@ export const useChatStore = defineStore('chat', {
 			const stored = loadStoredStatuses();
 			stored[statusKey(username)] = status;
 			localStorage.setItem('userStatuses', JSON.stringify(stored));
-			if (bc) {
-				try {
-					bc.postMessage({ type: 'status_updated', username, status });
-				} catch {
-					// ignore
-				}
-			}
+			broadcast({ type: 'status_updated', username, status });
 		},
 
 		/**
@@ -783,65 +532,20 @@ export const useChatStore = defineStore('chat', {
 
 		reloadFromStorage() {
 			this.history = loadStoredHistory();
-			this.servers = loadStoredServers();
+			if (useAuthStore().isAuthenticated) void this.refreshServers();
 		},
 
 		/**
 		 * Zaznamená novú správu v kanáli (posúva hranicu 30-dňovej neaktivity).
-		 * Ukladá iba kanály, nie vybraný server, aby sa iným kartám neprepol server.
 		 * @param {string} channelName
 		 */
 		touchChannel(channelName) {
 			const info = this.findChannelByName(channelName);
 			if (!info) return;
 			info.channel.lastActivity = Date.now();
-			localStorage.setItem('chatServers', JSON.stringify(this.servers));
-		},
-
-		/**
-		 * Zruší kanály bez novej správy dlhšie ako 30 dní, aby sa ich channelName dal znova použiť.
-		 * @returns {string[]} názvy zaniknutých kanálov
-		 */
-		removeExpiredChannels(now = Date.now()) {
-			const limit = now - CHANNEL_INACTIVITY_LIMIT_MS;
-			/** @type {string[]} */
-			const expired = [];
-			let changed = false;
-
-			for (const server of this.servers) {
-				const kept = [];
-				for (const channel of server.channels) {
-					// Kanály bez záznamu aktivity (staršie dáta) začínajú plynúť od teraz
-					if (typeof channel.lastActivity !== 'number') {
-						channel.lastActivity = now;
-						changed = true;
-					}
-					if (channel.lastActivity < limit) {
-						expired.push(channel.name);
-					} else {
-						kept.push(channel);
-					}
-				}
-				if (kept.length !== server.channels.length) {
-					server.channels = kept;
-				}
-			}
-
-			if (expired.length === 0) {
-				if (changed) localStorage.setItem('chatServers', JSON.stringify(this.servers));
-				return expired;
-			}
-
-			localStorage.setItem('chatServers', JSON.stringify(this.servers));
-			this.applyExpiredChannels(expired);
-			if (bc) {
-				try {
-					bc.postMessage({ type: 'channels_expired', names: expired });
-				} catch {
-					// ignore
-				}
-			}
-			return expired;
+			apiRequest(`/channels/${info.channel.id}/activity`, { method: 'POST' }).catch(() => {
+				// ignore – aktivita sa zaznamená pri ďalšej správe
+			});
 		},
 
 		/**
@@ -860,13 +564,7 @@ export const useChatStore = defineStore('chat', {
 		 */
 		discardDeletedChannel(name) {
 			this.removeChannelHistory([name]);
-			if (bc) {
-				try {
-					bc.postMessage({ type: 'channels_deleted', names: [name] });
-				} catch {
-					// ignore
-				}
-			}
+			broadcast({ type: 'channels_deleted', names: [name] });
 		},
 
 		/**
@@ -907,17 +605,7 @@ export const useChatStore = defineStore('chat', {
 			};
 			this.history[channel].push(msg);
 			persistHistory(this.history);
-			if (bc) {
-				try {
-					bc.postMessage({
-						type: 'new_message',
-						channel,
-						message: msg,
-					});
-				} catch {
-					// ignore
-				}
-			}
+			broadcast({ type: 'new_message', channel, message: msg });
 		},
 
 		/**
@@ -931,21 +619,14 @@ export const useChatStore = defineStore('chat', {
 			if (isTyping && this.statusOf(username) === 'offline') isTyping = false;
 			const time = Date.now();
 			this.applyTyping(channel, username, isTyping, time, text);
-
-			if (bc) {
-				try {
-					bc.postMessage({
-						type: 'typing',
-						channel,
-						username,
-						isTyping,
-						text: isTyping ? text : '',
-						time,
-					});
-				} catch {
-					// ignore
-				}
-			}
+			broadcast({
+				type: 'typing',
+				channel,
+				username,
+				isTyping,
+				text: isTyping ? text : '',
+				time,
+			});
 		},
 
 		/**
@@ -1015,20 +696,8 @@ export const useChatStore = defineStore('chat', {
 			const chanInfo = this.findChannelByName(channel);
 			const teamName = chanInfo?.server?.name || this.currentServer?.name || '';
 
-			if (bc) {
-				try {
-					bc.postMessage({
-						type: 'new_message',
-						channel,
-						message: msg,
-						team: teamName,
-					});
-				} catch {
-					// ignore
-				}
-			}
-
 			// Notifikácie dostávajú iba ostatní používatelia (bc.onmessage), nie odosielateľ
+			broadcast({ type: 'new_message', channel, message: msg, team: teamName });
 		},
 
 		/**
@@ -1046,59 +715,65 @@ export const useChatStore = defineStore('chat', {
 		},
 
 		/**
+		 * Zavolá akciu backendu, pridá systémovú správu do kanála a obnoví zoznam serverov.
+		 * @param {string} path
+		 * @param {{ method?: string, body?: any }} [options]
+		 */
+		async serverAction(path, options = { method: 'POST' }) {
+			const res = await apiRequest(path, { method: 'POST', ...options });
+			await this.refreshServers();
+			if (res?.announcement && res.channel) {
+				this.addSystemMessage(res.channel, res.announcement);
+			}
+			return res;
+		},
+
+		/**
+		 * Redirect po tom, ako používateľ prišiel o aktuálny kanál.
+		 * @returns {string}
+		 */
+		fallbackUrl() {
+			const name = firstChannelFor(this.currentServer, useAuthStore().currentUser || '');
+			return '/' + (name || '');
+		},
+
+		/**
 		 * @param {number} serverId
 		 * @param {string} username
+		 * @returns {Promise<CommandResult>}
 		 */
-		inviteUserToTeam(serverId, username) {
-			const server = this.servers.find((s) => s.id === serverId);
-			if (!server) return { success: false, message: 'Server neexistuje.' };
-			if (!Array.isArray(server.members)) server.members = [];
-			if (!server.members.includes(username)) {
-				server.members.push(username);
+		async inviteUserToTeam(serverId, username) {
+			try {
+				const res = await this.serverAction(`/teams/${serverId}/members`, {
+					body: { nickname: username.trim() },
+				});
+				return { success: true, message: res.message };
+			} catch (e) {
+				return failure(e);
 			}
-			const firstPub = server.channels.find((c) => c.type === 'public') || server.channels[0];
-			if (firstPub) {
-				if (!Array.isArray(firstPub.members)) firstPub.members = [];
-				if (!firstPub.members.includes(username)) {
-					firstPub.members.push(username);
-				}
-			}
-			const auth = useAuthStore();
-			const currentUser = auth.currentUser || 'Používateľ';
-			this.addSystemMessage(
-				firstPub?.name || 'všeobecný',
-				`Používateľ ${currentUser} pridal používateľa ${username} do tímu "${server.name}".`,
-			);
-			this.saveServers();
-			return {
-				success: true,
-				message: `Používateľ ${username} bol úspešne pridaný do tímu "${server.name}".`,
-			};
 		},
 
 		/**
-		 * Spustí príkaz napísaný používateľom. Pri príkazoch s prezývkou (/invite, /kick)
-		 * najprv cez backend overí, či taký používateľ existuje.
-		 * @param {string} currentChannelName
-		 * @param {string} commandLine
+		 * Opustenie servera (správca ho môže iba zmazať cez /delete).
+		 * @param {number} serverId
+		 * @returns {Promise<CommandResult>}
 		 */
-		async runCommand(currentChannelName, commandLine) {
-			const [command, nick] = commandLine.trim().slice(1).split(/\s+/);
-			if (nick && COMMANDS_WITH_USER.includes((command || '').toLowerCase())) {
-				await useAuthStore().fetchUser(nick);
+		async leaveServer(serverId) {
+			try {
+				const res = await this.serverAction(`/teams/${serverId}/leave`);
+				return { success: true, message: res.message, redirectUrl: this.fallbackUrl() };
+			} catch (e) {
+				return failure(e);
 			}
-			return this.executeCommand(currentChannelName, commandLine);
 		},
 
 		/**
-		 * Spracovanie príkazov z príkazového riadka
+		 * Spracovanie príkazov z príkazového riadka (zmeny vykoná backend)
 		 * @param {string} currentChannelName
 		 * @param {string} commandLine
-		 * @returns {{ success: boolean, message: string, redirectUrl?: string, newServerId?: number }}
+		 * @returns {Promise<CommandResult>}
 		 */
-		executeCommand(currentChannelName, commandLine) {
-			const auth = useAuthStore();
-			const currentUser = auth.currentUser || 'Používateľ';
+		async executeCommand(currentChannelName, commandLine) {
 			const trimmed = commandLine.trim();
 			const parts = trimmed.slice(1).split(/\s+/);
 			const command = (parts[0] || '').toLowerCase();
@@ -1107,707 +782,146 @@ export const useChatStore = defineStore('chat', {
 			const server = this.currentServer;
 			const channelInfo = this.findChannelByName(currentChannelName);
 			const currentChannel = channelInfo ? channelInfo.channel : null;
+			const currentUser = useAuthStore().currentUser || '';
+			const target = (args[0] || '').trim();
 
-			switch (command) {
-				// --- 1. /join channelName [private] ---
-				case 'join': {
-					if (args.length === 0 || !args[0]) {
-						return {
-							success: false,
-							message: 'Použitie: /join <channelName> [private]',
-						};
-					}
-					const rawName = args[0];
-					const isPrivate = args.slice(1).some((a) => a.toLowerCase() === 'private');
-					const formattedName = rawName
-						.toLowerCase()
-						.replace(/^#/, '')
-						.replace(/\s+/g, '-');
-
-					// Vyhľadanie v aktuálnom serveri
-					const existing = server.channels.find(
-						(c) => c.name.toLowerCase() === formattedName,
-					);
-
-					if (existing) {
-						// Kontrola banu
-						if (
-							Array.isArray(existing.banned) &&
-							existing.banned.includes(currentUser)
-						) {
+			try {
+				switch (command) {
+					// --- 1. /join channelName [private] ---
+					case 'join': {
+						if (!target) {
+							return { success: false, message: 'Použitie: /join <channelName> [private]' };
+						}
+						if (!server) {
 							return {
 								success: false,
-								message: `Nemôžeš sa pripojiť do kanála #${existing.name}, pretože v ňom máš trvalý ban.`,
+								message: 'Najprv si vytvor server príkazom /create <nazov servera>.',
 							};
 						}
-
-						// Kontrola súkromného kanála
-						if (existing.type === 'private') {
-							const hasAccess =
-								existing.admin === currentUser ||
-								(Array.isArray(existing.members) &&
-									existing.members.includes(currentUser)) ||
-								(Array.isArray(existing.invited) &&
-									existing.invited.includes(currentUser));
-
-							if (!hasAccess) {
-								return {
-									success: false,
-									message: `Kanál #${existing.name} je súkromný. Vstup je povolený iba na pozvánku od správcu.`,
-								};
-							}
-						}
-
-						// Pridanie používateľa do zoznamu členov
-						if (!Array.isArray(existing.members)) existing.members = [];
-						if (!existing.members.includes(currentUser)) {
-							existing.members.push(currentUser);
-							this.addSystemMessage(
-								existing.name,
-								`Používateľ ${currentUser} sa pripojil do kanála #${existing.name}.`,
-							);
-						}
-
-						if (!Array.isArray(server.members)) server.members = [];
-						if (!server.members.includes(currentUser)) {
-							server.members.push(currentUser);
-						}
-
-						this.saveServers();
-						return {
-							success: true,
-							message: `Pripojil si sa do kanála #${existing.name}.`,
-							redirectUrl: '/' + existing.name,
-						};
-					}
-
-					// Ak kanál neexistuje, automaticky sa vytvorí
-					/** @type {Channel} */
-					const newChan = {
-						id: Date.now(),
-						name: formattedName,
-						type: isPrivate ? 'private' : 'public',
-						admin: currentUser,
-						members: [currentUser],
-						invited: [],
-						banned: [],
-						kicks: {},
-						lastActivity: Date.now(),
-					};
-
-					server.channels.push(newChan);
-					if (!Array.isArray(server.members)) server.members = [];
-					if (!server.members.includes(currentUser)) {
-						server.members.push(currentUser);
-					}
-					this.saveServers();
-					this.addSystemMessage(
-						newChan.name,
-						`Používateľ ${currentUser} vytvoril nový ${newChan.type === 'private' ? 'súkromný' : 'verejný'} kanál #${newChan.name}.`,
-					);
-
-					return {
-						success: true,
-						message: `Kanál #${newChan.name} bol úspešne vytvorený a stal si sa jeho správcom.`,
-						redirectUrl: '/' + newChan.name,
-					};
-				}
-
-				// --- 2. /create <nazov servera> [private] ---
-				case 'create': {
-					if (args.length === 0) {
-						return {
-							success: false,
-							message: 'Použitie: /create <nazov servera> [private]',
-						};
-					}
-					const isPrivate = args[args.length - 1].toLowerCase() === 'private';
-					const nameArgs = isPrivate ? args.slice(0, -1) : args;
-					const serverName = nameArgs.join(' ').trim();
-
-					if (!serverName) {
-						return { success: false, message: 'Názov servera nemôže byť prázdny.' };
-					}
-
-					const defaultChannel = {
-						id: Date.now() + 1,
-						name: 'všeobecný',
-						type: 'public',
-						admin: currentUser,
-						members: [currentUser],
-						invited: [],
-						banned: [],
-						kicks: {},
-						lastActivity: Date.now(),
-					};
-
-					/** @type {Server} */
-					const newServer = {
-						id: Date.now(),
-						name: serverName,
-						type: isPrivate ? 'private' : 'public',
-						admin: currentUser,
-						members: [currentUser],
-						channels: [defaultChannel],
-					};
-
-					this.servers.push(newServer);
-					this.selectedServerId = newServer.id;
-					this.saveServers();
-
-					return {
-						success: true,
-						message: `Server "${serverName}" bol úspešne vytvorený a stal si sa jeho vlastníkom.`,
-						redirectUrl: '/všeobecný',
-						newServerId: newServer.id,
-					};
-				}
-
-				// --- 3. /delete (zrušenie servera správcom) ---
-				case 'delete': {
-					if (!isSameUser(server.admin, currentUser)) {
-						return {
-							success: false,
-							message: `Iba správca servera ("${server.admin}") môže zmazať tento server.`,
-						};
-					}
-
-					const deletedName = server.name;
-					this.servers = this.servers.filter((s) => s.id !== server.id);
-
-					// Ak by nezostal žiadny server, obnovíme základný
-					if (this.servers.length === 0) {
-						this.servers = [...INITIAL_SERVERS];
-					}
-
-					const visible = this.visibleServers;
-					const nextServer = visible[0] || this.servers[0];
-					this.selectedServerId = nextServer.id;
-					const fallbackChannel = nextServer.channels[0]?.name || 'všeobecný';
-					this.saveServers();
-
-					return {
-						success: true,
-						message: `Server "${deletedName}" bol úspešne zmazaný.`,
-						redirectUrl: '/' + fallbackChannel,
-					};
-				}
-
-				// --- 4. /invite nickName ---
-				case 'invite': {
-					if (args.length === 0 || !args[0]) {
-						return { success: false, message: 'Použitie: /invite <nickName>' };
-					}
-					const targetNick = findKnownNick(args[0].trim());
-					if (!targetNick) {
-						return {
-							success: false,
-							message: `Používateľ ${args[0].trim()} neexistuje.`,
-						};
-					}
-					if (isSameUser(targetNick, currentUser)) {
-						return { success: false, message: 'Nemôžeš pozvať sám seba.' };
-					}
-
-					if (!currentChannel) {
-						return { success: false, message: 'Nie si v žiadnom kanáli.' };
-					}
-
-					// Až po úspešnej pozvánke je používateľ pridaný do tímu (servera), aby videl tím
-					const addTargetToServer = () => {
-						if (!Array.isArray(server.members)) server.members = [];
-						if (!server.members.includes(targetNick)) {
-							server.members.push(targetNick);
-						}
-					};
-
-					// Ak je to súkromný kanál
-					if (currentChannel.type === 'private') {
-						if (currentChannel.admin !== currentUser) {
-							return {
-								success: false,
-								message: 'Iba správca súkromného kanála môže pozývať používateľov.',
-							};
-						}
-
-						if (
-							Array.isArray(currentChannel.members) &&
-							currentChannel.members.includes(targetNick)
-						) {
-							return {
-								success: false,
-								message: `Používateľ ${targetNick} už je členom kanála #${currentChannel.name}.`,
-							};
-						}
-
-						if (!Array.isArray(currentChannel.invited)) currentChannel.invited = [];
-						if (!Array.isArray(currentChannel.members)) currentChannel.members = [];
-
-						if (!currentChannel.invited.includes(targetNick)) {
-							currentChannel.invited.push(targetNick);
-						}
-
-						addTargetToServer();
-						this.saveServers();
-						this.addSystemMessage(
-							currentChannel.name,
-							`Správca ${currentUser} pozval používateľa ${targetNick} do súkromného kanála #${currentChannel.name}.`,
-						);
-
-						return {
-							success: true,
-							message: `Používateľ ${targetNick} bol pozvaný do súkromného kanála #${currentChannel.name}.`,
-						};
-					}
-
-					// Ak je to verejný kanál
-					if (
-						!Array.isArray(currentChannel.members) ||
-						!currentChannel.members.includes(currentUser)
-					) {
-						return {
-							success: false,
-							message:
-								'Musíš byť členom kanála, aby si mohol pozvať iného používateľa.',
-						};
-					}
-
-					// Ak má cieľový používateľ trvalý ban:
-					if (
-						Array.isArray(currentChannel.banned) &&
-						currentChannel.banned.includes(targetNick)
-					) {
-						if (currentChannel.admin !== currentUser) {
-							return {
-								success: false,
-								message: `Používateľ ${targetNick} má trvalý ban. Prístup mu môže obnoviť iba správca kanála (${currentChannel.admin}).`,
-							};
-						}
-
-						// Správca obnovuje prístup
-						currentChannel.banned = currentChannel.banned.filter(
-							(b) => b !== targetNick,
-						);
-						if (currentChannel.kicks) delete currentChannel.kicks[targetNick];
-						if (!currentChannel.members.includes(targetNick)) {
-							currentChannel.members.push(targetNick);
-						}
-
-						addTargetToServer();
-						this.saveServers();
-						this.addSystemMessage(
-							currentChannel.name,
-							`Správca ${currentUser} obnovil prístup používateľovi ${targetNick} do kanála #${currentChannel.name}.`,
-						);
-
-						return {
-							success: true,
-							message: `Prístup do kanála #${currentChannel.name} pre používateľa ${targetNick} bol úspešne obnovený.`,
-						};
-					}
-
-					// Bežné pozvanie do verejného kanála
-					if (
-						Array.isArray(currentChannel.members) &&
-						currentChannel.members.includes(targetNick)
-					) {
-						return {
-							success: false,
-							message: `Používateľ ${targetNick} už je členom kanála #${currentChannel.name}.`,
-						};
-					}
-
-					if (!Array.isArray(currentChannel.invited)) currentChannel.invited = [];
-					if (!Array.isArray(currentChannel.members)) currentChannel.members = [];
-
-					if (!currentChannel.invited.includes(targetNick)) {
-						currentChannel.invited.push(targetNick);
-					}
-
-					addTargetToServer();
-					this.saveServers();
-					this.addSystemMessage(
-						currentChannel.name,
-						`Používateľ ${currentUser} pozval ${targetNick} do kanála #${currentChannel.name}.`,
-					);
-
-					return {
-						success: true,
-						message: `Používateľ ${targetNick} bol pozvaný do kanála #${currentChannel.name}.`,
-					};
-				}
-
-				// --- 5. /revoke nickName (iba správca v súkromnom kanáli) ---
-				case 'revoke': {
-					if (args.length === 0 || !args[0]) {
-						return { success: false, message: 'Použitie: /revoke <nickName>' };
-					}
-					const targetNick = args[0].trim();
-
-					if (!currentChannel) {
-						return { success: false, message: 'Nie si v žiadnom kanáli.' };
-					}
-
-					if (currentChannel.type !== 'private') {
-						return {
-							success: false,
-							message: 'Príkaz /revoke je určený iba pre súkromné kanály.',
-						};
-					}
-
-					if (currentChannel.admin !== currentUser) {
-						return {
-							success: false,
-							message:
-								'Iba správca súkromného kanála môže odoberať prístup používateľom.',
-						};
-					}
-
-					if (targetNick === currentChannel.admin) {
-						return {
-							success: false,
-							message: 'Správca kanála nemôže odobrať prístup sám sebe.',
-						};
-					}
-
-					currentChannel.members = (currentChannel.members || []).filter(
-						(m) => m !== targetNick,
-					);
-					currentChannel.invited = (currentChannel.invited || []).filter(
-						(i) => i !== targetNick,
-					);
-
-					this.saveServers();
-					this.addSystemMessage(
-						currentChannel.name,
-						`Správca ${currentUser} odobral prístup používateľovi ${targetNick} zo súkromného kanála #${currentChannel.name}.`,
-					);
-
-					return {
-						success: true,
-						message: `Používateľovi ${targetNick} bol odobraný prístup do kanála #${currentChannel.name}.`,
-					};
-				}
-
-				// --- 6. /kick nickName ---
-				case 'kick': {
-					if (args.length === 0 || !args[0]) {
-						return { success: false, message: 'Použitie: /kick <nickName>' };
-					}
-					const targetNick = findKnownNick(args[0].trim());
-					if (!targetNick) {
-						return {
-							success: false,
-							message: `Používateľ ${args[0].trim()} neexistuje.`,
-						};
-					}
-					if (!currentChannel) {
-						return { success: false, message: 'Nie si v žiadnom kanáli.' };
-					}
-
-					if (currentChannel.type === 'private') {
-						return {
-							success: false,
-							message: 'V súkromnom kanáli použi príkaz /revoke <nickName>.',
-						};
-					}
-
-					// Zabanovaný už nie je členom - ten dostane hlášku o bane nižšie
-					if (
-						!userListIncludes(currentChannel.members, targetNick) &&
-						!userListIncludes(currentChannel.banned, targetNick)
-					) {
-						return {
-							success: false,
-							message: `Používateľ ${targetNick} nie je členom kanála #${currentChannel.name}.`,
-						};
-					}
-
-					if (targetNick === currentUser) {
-						return { success: false, message: 'Nemôžeš vyhodiť sám seba.' };
-					}
-
-					if (targetNick === currentChannel.admin) {
-						return { success: false, message: 'Správca kanála nemôže byť vyhodený.' };
-					}
-
-					if (
-						!Array.isArray(currentChannel.members) ||
-						!currentChannel.members.includes(currentUser)
-					) {
-						return {
-							success: false,
-							message: 'Iba členovia kanála môžu vyhadzovať iných používateľov.',
-						};
-					}
-
-					if (!Array.isArray(currentChannel.banned)) currentChannel.banned = [];
-					if (!currentChannel.kicks) currentChannel.kicks = {};
-
-					if (currentChannel.banned.includes(targetNick)) {
-						return {
-							success: false,
-							message: `Používateľ ${targetNick} už má v tomto kanáli trvalý ban.`,
-						};
-					}
-
-					// Ak vyhadzuje správca -> okamžitý trvalý ban
-					if (currentChannel.admin === currentUser) {
-						currentChannel.banned.push(targetNick);
-						currentChannel.members = (currentChannel.members || []).filter(
-							(m) => m !== targetNick,
-						);
-						currentChannel.invited = (currentChannel.invited || []).filter(
-							(i) => i !== targetNick,
-						);
-						delete currentChannel.kicks[targetNick];
-
-						this.saveServers();
-						this.addSystemMessage(
-							currentChannel.name,
-							`Správca ${currentUser} vyhodil používateľa ${targetNick} natrvalo (trvalý ban).`,
-						);
-
-						return {
-							success: true,
-							message: `Používateľ ${targetNick} bol natrvalo vyhodený správcom.`,
-						};
-					}
-
-					// Ak vyhadzuje bežný člen -> hlasovanie (min. 3 členovia)
-					if (!currentChannel.kicks[targetNick]) {
-						currentChannel.kicks[targetNick] = [];
-					}
-
-					if (currentChannel.kicks[targetNick].includes(currentUser)) {
-						return {
-							success: false,
-							message: `Už si hlasoval za vyhodenie používateľa ${targetNick}.`,
-						};
-					}
-
-					currentChannel.kicks[targetNick].push(currentUser);
-					const voteCount = currentChannel.kicks[targetNick].length;
-
-					if (voteCount >= 3) {
-						currentChannel.banned.push(targetNick);
-						currentChannel.members = (currentChannel.members || []).filter(
-							(m) => m !== targetNick,
-						);
-						currentChannel.invited = (currentChannel.invited || []).filter(
-							(i) => i !== targetNick,
-						);
-						delete currentChannel.kicks[targetNick];
-
-						this.saveServers();
-						this.addSystemMessage(
-							currentChannel.name,
-							`Používateľ ${targetNick} bol vyhodený na základe 3 hlasov členov a dostal trvalý ban pre kanál #${currentChannel.name}.`,
-						);
-
-						return {
-							success: true,
-							message: `Používateľ ${targetNick} bol vyhodený (3 hlasy dosiahnuté) a má trvalý ban.`,
-						};
-					}
-
-					this.saveServers();
-					this.addSystemMessage(
-						currentChannel.name,
-						`Používateľ ${currentUser} hlasoval za vyhodenie ${targetNick} (${voteCount}/3).`,
-					);
-
-					return {
-						success: true,
-						message: `Hlas za vyhodenie používateľa ${targetNick} bol zaznamenaný (${voteCount}/3).`,
-					};
-				}
-
-				// --- 7. /quit (zrušenie kanála správcom) ---
-				case 'quit': {
-					if (!currentChannel) {
-						return { success: false, message: 'Nie si v žiadnom kanáli.' };
-					}
-
-					if (currentChannel.admin !== currentUser) {
-						return {
-							success: false,
-							message: 'Iba správca kanála môže zrušiť kanál príkazom /quit.',
-						};
-					}
-
-					const deletedChannelName = currentChannel.name;
-					server.channels = server.channels.filter((c) => c.id !== currentChannel.id);
-
-					if (server.channels.length === 0) {
-						server.channels.push({
-							id: Date.now(),
-							name: 'všeobecný',
-							type: 'public',
-							admin: currentUser,
-							members: [currentUser],
-							invited: [],
-							banned: [],
-							kicks: {},
+						const isPrivate = args.slice(1).some((a) => a.toLowerCase() === 'private');
+						const res = await this.serverAction(`/teams/${server.id}/channels`, {
+							body: { name: target, type: isPrivate ? 'private' : 'public' },
 						});
+						return { success: true, message: res.message, redirectUrl: '/' + res.channel };
 					}
 
-					const nextChannel =
-						server.channels.find(
-							(c) => Array.isArray(c.members) && c.members.includes(currentUser),
-						)?.name ||
-						server.channels.find(
-							(c) => Array.isArray(c.invited) && c.invited.includes(currentUser),
-						)?.name ||
-						server.channels[0]?.name ||
-						'všeobecný';
-					this.saveServers();
-					this.discardDeletedChannel(deletedChannelName);
-
-					return {
-						success: true,
-						message: `Kanál #${deletedChannelName} bol zrušený správcom.`,
-						redirectUrl: '/' + nextChannel,
-					};
-				}
-
-				// --- 8. /cancel (zrušenie členstva v kanáli) ---
-				case 'cancel': {
-					if (!currentChannel) {
-						return { success: false, message: 'Nie si v žiadnom kanáli.' };
-					}
-
-					// Ak /cancel spraví správca, kanál zaniká!
-					if (currentChannel.admin === currentUser) {
-						const deletedChannelName = currentChannel.name;
-						server.channels = server.channels.filter((c) => c.id !== currentChannel.id);
-
-						if (server.channels.length === 0) {
-							server.channels.push({
-								id: Date.now(),
-								name: 'všeobecný',
-								type: 'public',
-								admin: currentUser,
-								members: [currentUser],
-								invited: [],
-								banned: [],
-								kicks: {},
-							});
+					// --- 2. /create <nazov servera> [private] ---
+					case 'create': {
+						const isPrivate = args[args.length - 1]?.toLowerCase() === 'private';
+						const serverName = (isPrivate ? args.slice(0, -1) : args).join(' ').trim();
+						if (!serverName) {
+							return {
+								success: false,
+								message: 'Použitie: /create <nazov servera> [private]',
+							};
 						}
-
-						const nextChannel =
-							server.channels.find(
-								(c) => Array.isArray(c.members) && c.members.includes(currentUser),
-							)?.name ||
-							server.channels.find(
-								(c) => Array.isArray(c.invited) && c.invited.includes(currentUser),
-							)?.name ||
-							server.channels[0]?.name ||
-							'všeobecný';
-						this.saveServers();
-						this.discardDeletedChannel(deletedChannelName);
-
+						const res = await apiRequest('/teams', {
+							method: 'POST',
+							body: { name: serverName, type: isPrivate ? 'private' : 'public' },
+						});
+						this.selectServer(res.teamId);
+						await this.refreshServers();
 						return {
 							success: true,
-							message: `Ako správca si zrušil svoje členstvo, preto kanál #${deletedChannelName} zanikol.`,
-							redirectUrl: '/' + nextChannel,
+							message: res.message,
+							redirectUrl: '/' + res.channel,
+							newServerId: res.teamId,
 						};
 					}
 
-					// Ak je to bežný člen:
-					currentChannel.members = (currentChannel.members || []).filter(
-						(m) => m !== currentUser,
-					);
-					currentChannel.invited = (currentChannel.invited || []).filter(
-						(i) => i !== currentUser,
-					);
-
-					this.saveServers();
-					this.addSystemMessage(
-						currentChannel.name,
-						`Používateľ ${currentUser} zrušil svoje členstvo v kanáli #${currentChannel.name}.`,
-					);
-
-					const nextChannel =
-						server.channels.find(
-							(c) => Array.isArray(c.members) && c.members.includes(currentUser),
-						)?.name ||
-						server.channels.find(
-							(c) => Array.isArray(c.invited) && c.invited.includes(currentUser),
-						)?.name ||
-						server.channels.find(
-							(c) =>
-								c.type === 'public' &&
-								(!Array.isArray(c.banned) || !c.banned.includes(currentUser)),
-						)?.name ||
-						server.channels[0]?.name ||
-						'všeobecný';
-
-					return {
-						success: true,
-						message: `Zrušil si svoje členstvo v kanáli #${currentChannel.name}.`,
-						redirectUrl: '/' + nextChannel,
-					};
-				}
-
-				// --- 9. /list (zoznam členov kanála) ---
-				case 'list': {
-					if (!currentChannel) {
-						return { success: false, message: 'Nie si v žiadnom kanáli.' };
+					// --- 3. /delete (zrušenie servera správcom) ---
+					case 'delete': {
+						if (!server) return { success: false, message: 'Nie si v žiadnom serveri.' };
+						const res = await this.serverAction(`/teams/${server.id}`, {
+							method: 'DELETE',
+						});
+						return { success: true, message: res.message, redirectUrl: this.fallbackUrl() };
 					}
 
-					if (
-						!Array.isArray(currentChannel.members) ||
-						!currentChannel.members.includes(currentUser)
-					) {
+					// --- 4. /invite nickName ---
+					// --- 5. /revoke nickName (iba správca v súkromnom kanáli) ---
+					// --- 6. /kick nickName ---
+					case 'invite':
+					case 'revoke':
+					case 'kick': {
+						if (!target) {
+							return { success: false, message: `Použitie: /${command} <nickName>` };
+						}
+						if (!currentChannel) {
+							return { success: false, message: 'Nie si v žiadnom kanáli.' };
+						}
+						const res = await this.serverAction(`/channels/${currentChannel.id}/${command}`, {
+							body: { nickname: target },
+						});
+						return { success: true, message: res.message };
+					}
+
+					// --- 7. /quit (zrušenie kanála správcom) ---
+					// --- 8. /cancel (zrušenie členstva v kanáli, správca ním kanál ruší) ---
+					case 'quit':
+					case 'cancel': {
+						if (!currentChannel) {
+							return { success: false, message: 'Nie si v žiadnom kanáli.' };
+						}
+						const res =
+							command === 'quit'
+								? await this.serverAction(`/channels/${currentChannel.id}`, {
+										method: 'DELETE',
+									})
+								: await this.serverAction(`/channels/${currentChannel.id}/leave`);
+						if (res.deleted) this.discardDeletedChannel(currentChannel.name);
+						return { success: true, message: res.message, redirectUrl: this.fallbackUrl() };
+					}
+
+					// --- 9. /list (zoznam členov kanála) ---
+					case 'list': {
+						if (!currentChannel) {
+							return { success: false, message: 'Nie si v žiadnom kanáli.' };
+						}
+						if (!userListIncludes(currentChannel.members, currentUser)) {
+							return {
+								success: false,
+								message: `Musíš byť členom kanála #${currentChannel.name}, aby si si mohol pozrieť zoznam členov.`,
+							};
+						}
+						const members = currentChannel.members;
+						const formatted = members
+							.map((m) =>
+								isSameUser(m, currentChannel.admin) ? `👑 ${m} (správca)` : `• ${m}`,
+							)
+							.join('\n');
+						return {
+							success: true,
+							message: `Zoznam členov kanála #${currentChannel.name} (${members.length}):\n${formatted}`,
+						};
+					}
+
+					// --- 10. /help ---
+					case 'help': {
+						const helpText = [
+							'Dostupné príkazy príkazového riadka:',
+							'• /join <channelName> [private] – pripojenie do kanála alebo vytvorenie nového',
+							'• /create <nazov servera> [private] – vytvorenie nového servera',
+							'• /delete – zrušenie aktuálneho servera (iba správca servera)',
+							'• /invite <nickName> – pozvanie používateľa (alebo správca verejného kanála: obnovenie banu)',
+							'• /revoke <nickName> – odobratie prístupu v súkromnom kanáli (iba správca)',
+							'• /kick <nickName> – vyhodenie používateľa (3 hlasy = trvalý ban; správca = okamžitý trvalý ban)',
+							'• /quit – zatvorenie/zrušenie kanála (iba správca kanála)',
+							'• /cancel – zrušenie vlastného členstva (ak si správca, kanál zaniká)',
+							'• /list – zobrazenie zoznamu členov aktuálneho kanála',
+						].join('\n');
+						return { success: true, message: helpText };
+					}
+
+					default: {
 						return {
 							success: false,
-							message: `Musíš byť členom kanála #${currentChannel.name}, aby si si mohol pozrieť zoznam členov.`,
+							message: `Neznámy príkaz: /${command}. Pre zoznam dostupných príkazov zadaj /help.`,
 						};
 					}
-
-					const members = Array.isArray(currentChannel.members)
-						? currentChannel.members
-						: [];
-					const formatted = members
-						.map((m) => (m === currentChannel.admin ? `👑 ${m} (správca)` : `• ${m}`))
-						.join('\n');
-
-					const message = `Zoznam členov kanála #${currentChannel.name} (${members.length}):\n${formatted}`;
-
-					return {
-						success: true,
-						message,
-					};
 				}
-
-				// --- 10. /help ---
-				case 'help': {
-					const helpText = [
-						'Dostupné príkazy príkazového riadka:',
-						'• /join <channelName> [private] – pripojenie do kanála alebo vytvorenie nového',
-						'• /create <nazov servera> [private] – vytvorenie nového servera',
-						'• /delete – zrušenie aktuálneho servera (iba správca servera)',
-						'• /invite <nickName> – pozvanie používateľa (alebo správca verejného kanála: obnovenie banu)',
-						'• /revoke <nickName> – odobratie prístupu v súkromnom kanáli (iba správca)',
-						'• /kick <nickName> – vyhodenie používateľa (3 hlasy = trvalý ban; správca = okamžitý trvalý ban)',
-						'• /quit – zatvorenie/zrušenie kanála (iba správca kanála)',
-						'• /cancel – zrušenie vlastného členstva (ak si správca, kanál zaniká)',
-						'• /list – zobrazenie zoznamu členov aktuálneho kanála',
-					].join('\n');
-
-					return {
-						success: true,
-						message: helpText,
-					};
-				}
-
-				default: {
-					return {
-						success: false,
-						message: `Neznámy príkaz: /${command}. Pre zoznam dostupných príkazov zadaj /help.`,
-					};
-				}
+			} catch (e) {
+				return failure(e);
 			}
 		},
 	},
@@ -1853,17 +967,16 @@ if (bc) {
 			} else if (myStatus === 'online') {
 				triggerPing(data.channel, data.message, isMentioned, teamName);
 			}
-		} else if (data.type === 'servers_updated') {
-			chatStore.servers = data.servers;
-			chatStore.selectedServerId = data.selectedServerId;
+		} else if (data.type === 'servers_changed') {
+			// Iná karta zmenila servery/kanály na backende – načítame aktuálny stav
+			if (useAuthStore().isAuthenticated) {
+				chatStore.loadServers().catch(() => {
+					// ignore
+				});
+			}
 		} else if (data.type === 'status_updated') {
 			chatStore.applyUserStatus(data.username, data.status);
-		} else if (data.type === 'channels_expired') {
-			// Aj offline karta musí zahodiť históriu, inak by ju pri ďalšom uložení vrátila späť
-			chatStore.servers = loadStoredServers();
-			chatStore.applyExpiredChannels(data.names);
 		} else if (data.type === 'channels_deleted') {
-			chatStore.servers = loadStoredServers();
 			chatStore.removeChannelHistory(data.names);
 		}
 	};
@@ -1891,22 +1004,6 @@ if (typeof window !== 'undefined') {
 				if (store.currentUserStatus !== 'offline') {
 					store.history = JSON.parse(event.newValue);
 				}
-			} catch {
-				// ignore
-			}
-		}
-		if (event.key === 'chatServers' && event.newValue) {
-			try {
-				const store = useChatStore();
-				store.servers = JSON.parse(event.newValue);
-			} catch {
-				// ignore
-			}
-		}
-		if (event.key === 'chatSelectedServerId' && event.newValue) {
-			try {
-				const store = useChatStore();
-				store.selectedServerId = Number(event.newValue);
 			} catch {
 				// ignore
 			}

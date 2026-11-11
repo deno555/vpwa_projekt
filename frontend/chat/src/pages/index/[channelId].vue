@@ -686,22 +686,19 @@
 <script lang="ts">
 import { defineComponent } from 'vue';
 import { mapStores } from 'pinia';
-import { isSameUser, STATUS_OPTIONS, useChatStore, useAuthStore } from '@/stores/store';
+import {
+	firstChannelFor,
+	isSameUser,
+	STATUS_OPTIONS,
+	useChatStore,
+	useAuthStore,
+} from '@/stores/store';
 import {
 	isUserMentioned,
 	renderMessageHtml,
 	requestNotificationPermission,
 } from '@/utils/notifications';
 import type { QScrollArea } from 'quasar';
-
-interface ChannelItem {
-	name: string;
-	type: 'public' | 'private';
-	admin: string;
-	members: string[];
-	invited: string[];
-	banned: string[];
-}
 
 // Počet správ načítaných naraz pri infinite scrolle
 const MESSAGES_PAGE_SIZE = 20;
@@ -999,39 +996,18 @@ export default defineComponent({
 		},
 
 		goToAccessibleChannel() {
-			const server = this.chatStore.currentServer;
-			const memberChannels = (server?.channels || []).filter(
-				(c: ChannelItem) =>
-					Array.isArray(c.members) &&
-					c.members.includes(this.currentUsername) &&
-					(!Array.isArray(c.banned) || !c.banned.includes(this.currentUsername)),
-			);
-			const invitedChannels = (server?.channels || []).filter(
-				(c: ChannelItem) =>
-					Array.isArray(c.invited) &&
-					c.invited.includes(this.currentUsername) &&
-					(!Array.isArray(c.banned) || !c.banned.includes(this.currentUsername)),
-			);
-			const accessibleChannels = (server?.channels || []).filter((c: ChannelItem) =>
-				this.chatStore.hasChannelAccess(c, this.currentUsername),
-			);
-			const nextChannel =
-				memberChannels[0]?.name ||
-				invitedChannels[0]?.name ||
-				accessibleChannels[0]?.name ||
-				server?.channels[0]?.name ||
-				'všeobecný';
-			void this.$router.push('/' + nextChannel);
+			const next = firstChannelFor(this.chatStore.currentServer, this.currentUsername);
+			void this.$router.push('/' + (next || ''));
 		},
 
-		showHelp() {
-			const res = this.chatStore.executeCommand(this.channelName, '/help');
+		async showHelp() {
+			const res = await this.chatStore.executeCommand(this.channelName, '/help');
 			this.chatStore.addSystemMessage(this.channelName, res.message);
 		},
 
-		quickJoin() {
+		async quickJoin() {
 			if (!this.hasAccess) return;
-			const res = this.chatStore.executeCommand(
+			const res = await this.chatStore.executeCommand(
 				this.channelName,
 				`/join ${this.channelName}`,
 			);
@@ -1051,17 +1027,12 @@ export default defineComponent({
 			// Príkaz terminálu
 			if (text.startsWith('/')) {
 				this.newMessage = '';
-				const res = await this.chatStore.runCommand(this.channelName, text);
+				const res = await this.chatStore.executeCommand(this.channelName, text);
 				this.chatStore.addSystemMessage(this.channelName, res.message);
 				if (text.toLowerCase().trim() === '/list') {
 					this.showMembers = true;
 				}
-				if (res.newServerId) {
-					this.chatStore.selectServer(res.newServerId);
-					void this.$router.push(
-						'/' + (res.redirectUrl ? res.redirectUrl.replace(/^\//, '') : 'všeobecný'),
-					);
-				} else if (res.redirectUrl) {
+				if (res.redirectUrl) {
 					void this.$router.push(res.redirectUrl);
 				}
 				return;

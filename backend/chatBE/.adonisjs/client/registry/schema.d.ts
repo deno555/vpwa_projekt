@@ -55,16 +55,148 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/access_tokens_controller').default['destroy']>>>
     }
   }
-  'users.show': {
+  'teams.teams.index': {
     methods: ["GET","HEAD"]
-    pattern: '/api/v1/users/:nickname'
+    pattern: '/api/v1/teams'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/teams_controller').default['index']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/teams_controller').default['index']>>>
+    }
+  }
+  'teams.teams.store': {
+    methods: ["POST"]
+    pattern: '/api/v1/teams'
+    types: {
+      body: ExtractBody<InferInput<(typeof import('#validators/channel').createTeamValidator)>>
+      paramsTuple: []
+      params: {}
+      query: ExtractQuery<InferInput<(typeof import('#validators/channel').createTeamValidator)>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/teams_controller').default['store']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/teams_controller').default['store']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
+  'teams.teams.destroy': {
+    methods: ["DELETE"]
+    pattern: '/api/v1/teams/:id'
     types: {
       body: {}
       paramsTuple: [ParamValue]
-      params: { nickname: ParamValue }
+      params: { id: ParamValue }
       query: {}
-      response: ExtractResponse<Awaited<ReturnType<import('#controllers/users_controller').default['show']>>>
-      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/users_controller').default['show']>>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/teams_controller').default['destroy']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/teams_controller').default['destroy']>>>
+    }
+  }
+  'teams.teams.leave': {
+    methods: ["POST"]
+    pattern: '/api/v1/teams/:id/leave'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/teams_controller').default['leave']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/teams_controller').default['leave']>>>
+    }
+  }
+  'teams.teams.add_member': {
+    methods: ["POST"]
+    pattern: '/api/v1/teams/:id/members'
+    types: {
+      body: ExtractBody<InferInput<(typeof import('#validators/channel').targetUserValidator)>>
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: ExtractQuery<InferInput<(typeof import('#validators/channel').targetUserValidator)>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/teams_controller').default['addMember']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/teams_controller').default['addMember']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
+  'teams.teams.join_channel': {
+    methods: ["POST"]
+    pattern: '/api/v1/teams/:id/channels'
+    types: {
+      body: ExtractBody<InferInput<(typeof import('#validators/channel').joinChannelValidator)>>
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: ExtractQuery<InferInput<(typeof import('#validators/channel').joinChannelValidator)>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/teams_controller').default['joinChannel']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/teams_controller').default['joinChannel']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
+  'channels.channels.destroy': {
+    methods: ["DELETE"]
+    pattern: '/api/v1/channels/:id'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/channels_controller').default['destroy']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/channels_controller').default['destroy']>>>
+    }
+  }
+  'channels.channels.leave': {
+    methods: ["POST"]
+    pattern: '/api/v1/channels/:id/leave'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/channels_controller').default['leave']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/channels_controller').default['leave']>>>
+    }
+  }
+  'channels.channels.invite': {
+    methods: ["POST"]
+    pattern: '/api/v1/channels/:id/invite'
+    types: {
+      body: ExtractBody<InferInput<(typeof import('#validators/channel').targetUserValidator)>>
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: ExtractQuery<InferInput<(typeof import('#validators/channel').targetUserValidator)>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/channels_controller').default['invite']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/channels_controller').default['invite']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
+  'channels.channels.revoke': {
+    methods: ["POST"]
+    pattern: '/api/v1/channels/:id/revoke'
+    types: {
+      body: ExtractBody<InferInput<(typeof import('#validators/channel').targetUserValidator)>>
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: ExtractQuery<InferInput<(typeof import('#validators/channel').targetUserValidator)>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/channels_controller').default['revoke']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/channels_controller').default['revoke']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
+  'channels.channels.kick': {
+    methods: ["POST"]
+    pattern: '/api/v1/channels/:id/kick'
+    types: {
+      body: ExtractBody<InferInput<(typeof import('#validators/channel').targetUserValidator)>>
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: ExtractQuery<InferInput<(typeof import('#validators/channel').targetUserValidator)>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/channels_controller').default['kick']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/channels_controller').default['kick']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
+  'channels.channels.activity': {
+    methods: ["POST"]
+    pattern: '/api/v1/channels/:id/activity'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/channels_controller').default['activity']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/channels_controller').default['activity']>>>
     }
   }
 }

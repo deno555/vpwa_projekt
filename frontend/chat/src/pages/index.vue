@@ -454,7 +454,10 @@
 import { defineComponent } from 'vue';
 import { mapStores } from 'pinia';
 import { Dialog } from 'quasar';
-import { STATUS_OPTIONS, useAuthStore, useChatStore } from '@/stores/store';
+import { STATUS_OPTIONS, firstChannelFor, useAuthStore, useChatStore } from '@/stores/store';
+
+// Ako často sa zoznam serverov a kanálov obnovuje z backendu
+const SERVERS_REFRESH_MS = 5000;
 
 // --- Quasar dialógy namiesto alert / confirm / prompt ---
 function showAlert(message: string, title = 'Upozornenie'): Promise<void> {
@@ -570,7 +573,7 @@ export default defineComponent({
 	data() {
 		return {
 			statusOptions: STATUS_OPTIONS,
-			expiryInterval: null as ReturnType<typeof setInterval> | null,
+			refreshInterval: null as ReturnType<typeof setInterval> | null,
 		};
 	},
 
@@ -581,17 +584,19 @@ export default defineComponent({
 			this.chatStore.setUserStatus(username, 'online');
 		}
 
-		// Kanály neaktívne viac ako 30 dní zanikajú (pri štarte a potom každú minútu)
-		this.chatStore.removeExpiredChannels();
-		this.expiryInterval = setInterval(() => {
-			this.chatStore.removeExpiredChannels();
-		}, 60 * 1000);
+		// Zoznam kanálov sa pravidelne obnovuje z backendu (pozvánky, bany, zrušené
+		// a po 30 dňoch neaktivity zaniknuté kanály)
+		this.refreshInterval = setInterval(() => {
+			this.chatStore.loadServers().catch(() => {
+				// ignore – skúsi sa znova pri ďalšom obnovení
+			});
+		}, SERVERS_REFRESH_MS);
 	},
 
 	beforeUnmount() {
-		if (this.expiryInterval) {
-			clearInterval(this.expiryInterval);
-			this.expiryInterval = null;
+		if (this.refreshInterval) {
+			clearInterval(this.refreshInterval);
+			this.refreshInterval = null;
 		}
 	},
 
@@ -641,7 +646,7 @@ export default defineComponent({
 		},
 
 		selectedServer(): ServerItem | null {
-			return (this.chatStore.currentServer as ServerItem) || null;
+			return this.chatStore.currentServer;
 		},
 
 		// Computed vlastnosti pre rozdelenie zoznamu kanálov
@@ -727,7 +732,21 @@ export default defineComponent({
 			const username = this.authStore.currentUser;
 			if (username) this.chatStore.setUserStatus(username, 'offline');
 			await this.authStore.logout();
+			this.chatStore.resetServers();
 			await this.$router.push('/login');
+		},
+
+		/**
+		 * Spustí príkaz; pri chybe ju ukáže v dialógu a pri úspechu presmeruje.
+		 */
+		async runCommand(channelName: string, command: string) {
+			const res = await this.chatStore.executeCommand(channelName, command);
+			if (!res.success) {
+				await showAlert(res.message);
+			} else if (res.redirectUrl) {
+				await this.$router.push(res.redirectUrl);
+			}
+			return res;
 		},
 
 		async selectServer(id: number) {
@@ -736,29 +755,8 @@ export default defineComponent({
 				this.chatStore.setLeftDrawer(false);
 			}
 			const server = this.chatStore.servers.find((s) => s.id === id);
-			const currentNick = this.authStore.currentUser || '';
-			const memberChannels = (server?.channels || []).filter(
-				(c: ChannelItem) =>
-					Array.isArray(c.members) &&
-					c.members.includes(currentNick) &&
-					(!Array.isArray(c.banned) || !c.banned.includes(currentNick)),
-			);
-			const invitedChannels = (server?.channels || []).filter(
-				(c: ChannelItem) =>
-					Array.isArray(c.invited) &&
-					c.invited.includes(currentNick) &&
-					(!Array.isArray(c.banned) || !c.banned.includes(currentNick)),
-			);
-			const accessibleChannels = (server?.channels || []).filter((c: ChannelItem) =>
-				this.hasChannelAccess(c),
-			);
-			const firstChannel =
-				memberChannels[0]?.name ||
-				invitedChannels[0]?.name ||
-				accessibleChannels[0]?.name ||
-				server?.channels[0]?.name ||
-				'všeobecný';
-			await this.$router.push('/' + firstChannel);
+			const firstChannel = firstChannelFor(server, this.authStore.currentUser || '');
+			await this.$router.push('/' + (firstChannel || ''));
 		},
 
 		async inviteToTeam() {
@@ -769,13 +767,8 @@ export default defineComponent({
 				'Pozvať do tímu',
 			);
 			if (!nick) return;
-			const currentNick = this.authStore.currentUser || '';
-			if (nick === currentNick) {
-				await showAlert('Nemôžeš pozvať sám seba.');
-				return;
-			}
-			const res = this.chatStore.inviteUserToTeam(serverId, nick);
-			await showAlert(res.message, 'Pozvánka');
+			const res = await this.chatStore.inviteUserToTeam(serverId, nick);
+			await showAlert(res.message, res.success ? 'Pozvánka' : 'Upozornenie');
 		},
 
 		async createServerPrompt() {
@@ -786,21 +779,15 @@ export default defineComponent({
 			if (!name) return;
 			const visibility = await showVisibilityPicker('Typ servera');
 			if (!visibility) return;
-			const res = this.chatStore.executeCommand(
-				'všeobecný',
+			await this.runCommand(
+				'',
 				`/create ${name} ${visibility === 'private' ? 'private' : ''}`,
 			);
-			if (res.newServerId) {
-				await this.selectServer(res.newServerId);
-			} else if (res.redirectUrl) {
-				await this.selectServer(this.chatStore.selectedServerId);
-			}
 		},
 
 		async leaveServer() {
 			if (!this.selectedServer) return;
 			const serverName = this.selectedServer.name;
-			const currentNick = this.authStore.currentUser || '';
 
 			if (this.isServerAdmin) {
 				if (
@@ -809,14 +796,7 @@ export default defineComponent({
 						'Opustiť server',
 					)
 				) {
-					if (!this.selectedServer) return;
-					const res = this.chatStore.executeCommand(
-						this.selectedServer.channels[0]?.name || 'všeobecný',
-						'/delete',
-					);
-					if (res.redirectUrl) {
-						await this.$router.push(res.redirectUrl);
-					}
+					await this.runCommand('', '/delete');
 				}
 				return;
 			}
@@ -828,54 +808,17 @@ export default defineComponent({
 				)
 			) {
 				if (!this.selectedServer) return;
-				if (Array.isArray(this.selectedServer.members)) {
-					this.selectedServer.members = this.selectedServer.members.filter(
-						(m: string) => m !== currentNick,
-					);
+				const res = await this.chatStore.leaveServer(this.selectedServer.id);
+				if (!res.success) {
+					await showAlert(res.message);
+					return;
 				}
-				for (const channel of this.selectedServer.channels) {
-					if (Array.isArray(channel.members)) {
-						channel.members = channel.members.filter((m: string) => m !== currentNick);
-					}
-					if (Array.isArray(channel.invited)) {
-						channel.invited = channel.invited.filter((i: string) => i !== currentNick);
-					}
-				}
-				this.chatStore.saveServers();
-
-				const visibleServers = this.servers.filter((s) => s.id !== this.selectedServerId);
-				const nextServ = visibleServers[0];
-				if (nextServ) {
-					this.chatStore.selectServer(nextServ.id);
-					const memberChannels = (nextServ.channels || []).filter(
-						(c: ChannelItem) =>
-							Array.isArray(c.members) &&
-							c.members.includes(currentNick) &&
-							(!Array.isArray(c.banned) || !c.banned.includes(currentNick)),
-					);
-					const invitedChannels = (nextServ.channels || []).filter(
-						(c: ChannelItem) =>
-							Array.isArray(c.invited) &&
-							c.invited.includes(currentNick) &&
-							(!Array.isArray(c.banned) || !c.banned.includes(currentNick)),
-					);
-					const accessibleChannels = (nextServ.channels || []).filter((c: ChannelItem) =>
-						this.hasChannelAccess(c),
-					);
-					const nextChannel =
-						memberChannels[0]?.name ||
-						invitedChannels[0]?.name ||
-						accessibleChannels[0]?.name ||
-						nextServ.channels[0]?.name ||
-						'všeobecný';
-					await this.$router.push('/' + nextChannel);
-					this.chatStore.addSystemMessage(
-						nextChannel,
-						`Opustil si server "${serverName}".`,
-					);
-				} else {
-					await this.$router.push('/');
-				}
+				await this.$router.push(res.redirectUrl || '/');
+				const channel = firstChannelFor(
+					this.chatStore.currentServer,
+					this.authStore.currentUser || '',
+				);
+				if (channel) this.chatStore.addSystemMessage(channel, res.message);
 			}
 		},
 
@@ -888,14 +831,7 @@ export default defineComponent({
 					'Zmazať server',
 				)
 			) {
-				if (!this.selectedServer) return;
-				const res = this.chatStore.executeCommand(
-					this.selectedServer.channels[0]?.name || 'všeobecný',
-					'/delete',
-				);
-				if (res.redirectUrl) {
-					await this.$router.push(res.redirectUrl);
-				}
+				await this.runCommand('', '/delete');
 			}
 		},
 
@@ -908,13 +844,7 @@ export default defineComponent({
 			if (!name) return;
 			const visibility = await showVisibilityPicker('Typ kanála');
 			if (!visibility) return;
-			const res = this.chatStore.executeCommand(
-				this.selectedServer?.channels[0]?.name || 'všeobecný',
-				`/join ${name} ${visibility === 'private' ? 'private' : ''}`,
-			);
-			if (res.redirectUrl) {
-				await this.$router.push(res.redirectUrl);
-			}
+			await this.runCommand('', `/join ${name} ${visibility === 'private' ? 'private' : ''}`);
 		},
 
 		async leaveChannel(channelName: string) {
@@ -924,10 +854,7 @@ export default defineComponent({
 					'Opustiť kanál',
 				)
 			) {
-				const res = this.chatStore.executeCommand(channelName, '/cancel');
-				if (res.redirectUrl) {
-					await this.$router.push(res.redirectUrl);
-				}
+				await this.runCommand(channelName, '/cancel');
 			}
 		},
 
@@ -938,21 +865,14 @@ export default defineComponent({
 					'Zrušiť kanál',
 				)
 			) {
-				const res = this.chatStore.executeCommand(channelName, '/quit');
-				if (res.redirectUrl) {
-					await this.$router.push(res.redirectUrl);
-				}
+				await this.runCommand(channelName, '/quit');
 			}
 		},
 
 		async joinChannel(channelName: string) {
-			const res = this.chatStore.executeCommand(channelName, `/join ${channelName}`);
+			const res = await this.chatStore.executeCommand(channelName, `/join ${channelName}`);
 			this.chatStore.addSystemMessage(channelName, res.message);
-			if (res.redirectUrl) {
-				await this.$router.push(res.redirectUrl);
-			} else {
-				await this.$router.push('/' + channelName);
-			}
+			await this.$router.push(res.redirectUrl || '/' + channelName);
 		},
 	},
 });

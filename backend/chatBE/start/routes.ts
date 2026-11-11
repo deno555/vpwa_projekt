@@ -34,9 +34,33 @@ router
       .as('profile')
       .use(middleware.auth())
 
+    // Tímy (servery) a ich kanály
     router
-      .get('users/:nickname', [controllers.Users, 'show'])
-      .as('users.show')
+      .group(() => {
+        router.get('/', [controllers.Teams, 'index'])
+        router.post('/', [controllers.Teams, 'store'])
+        router.delete(':id', [controllers.Teams, 'destroy'])
+        router.post(':id/leave', [controllers.Teams, 'leave'])
+        router.post(':id/members', [controllers.Teams, 'addMember'])
+        router.post(':id/channels', [controllers.Teams, 'joinChannel'])
+      })
+      .prefix('teams')
+      .as('teams')
+      .where('id', router.matchers.number())
+      .use(middleware.auth())
+
+    router
+      .group(() => {
+        router.delete(':id', [controllers.Channels, 'destroy'])
+        router.post(':id/leave', [controllers.Channels, 'leave'])
+        router.post(':id/invite', [controllers.Channels, 'invite'])
+        router.post(':id/revoke', [controllers.Channels, 'revoke'])
+        router.post(':id/kick', [controllers.Channels, 'kick'])
+        router.post(':id/activity', [controllers.Channels, 'activity'])
+      })
+      .prefix('channels')
+      .as('channels')
+      .where('id', router.matchers.number())
       .use(middleware.auth())
   })
   .prefix('/api/v1')

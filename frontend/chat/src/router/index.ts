@@ -6,7 +6,7 @@ import {
 	createWebHashHistory,
 	createWebHistory,
 } from 'vue-router';
-import { useAuthStore } from '@/stores/store';
+import { useAuthStore, useChatStore } from '@/stores/store';
 
 /*
  * If not building with SSR mode, you can
@@ -45,6 +45,16 @@ export default defineRouter((/* { store, ssrContext } */) => {
 		}
 		if (isAuthPage && auth.isAuthenticated) {
 			return '/';
+		}
+
+		// Pred zobrazením chatu načítame servery a kanály prihláseného používateľa
+		const chat = useChatStore();
+		if (auth.isAuthenticated && !chat.serversLoaded) {
+			try {
+				await chat.loadServers();
+			} catch {
+				// Server je nedostupný – chat sa zobrazí prázdny a obnoví sa neskôr
+			}
 		}
 	});
 

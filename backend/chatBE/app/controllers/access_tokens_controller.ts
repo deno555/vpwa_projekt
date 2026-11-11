@@ -2,6 +2,7 @@ import User from '#models/user'
 import { loginValidator } from '#validators/user'
 import type { HttpContext } from '@adonisjs/core/http'
 import UserTransformer from '#transformers/user_transformer'
+import { broadcastEvent } from '#services/realtime'
 
 export default class AccessTokensController {
   async store({ request, response, serialize }: HttpContext) {
@@ -15,6 +16,10 @@ export default class AccessTokensController {
     }
 
     const user = await User.verifyCredentials(identifier, payload.password)
+    user.status = 'ONLINE'
+    await user.save()
+    broadcastEvent('user:status', { nickname: user.nickname, status: 'online' })
+
     const token = await User.accessTokens.create(user)
 
     return serialize({
@@ -29,8 +34,13 @@ export default class AccessTokensController {
       await User.accessTokens.delete(user, user.currentAccessToken.identifier)
     }
 
+    user.status = 'OFFLINE'
+    await user.save()
+    broadcastEvent('user:status', { nickname: user.nickname, status: 'offline' })
+
     return {
       message: 'Logged out successfully',
     }
   }
 }
+

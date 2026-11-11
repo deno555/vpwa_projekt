@@ -172,41 +172,49 @@ export async function teamsForUser(user: User) {
     )
     .orderBy('id')
 
-  return teams.map((team) => ({
-    id: team.id,
-    name: team.name,
-    type: toApiVisibility(team.type),
-    admin: team.admin.nickname,
-    members: team.members.map((m) => m.user.nickname),
-    channels: team.channels
-      .filter((channel) => {
-        if (channel.type === 'PUBLIC' || channel.adminId === user.id) return true
-        const own = channel.members.find((m) => m.userId === user.id)
-        return own?.status === 'ACTIVE' || own?.status === 'INVITED'
-      })
-      .map((channel) => {
-        const byStatus = (status: MembershipStatus) =>
-          channel.members.filter((m) => m.status === status).map((m) => m.user.nickname)
+  return teams.map((team) => {
+    const userStatuses: Record<string, string> = {}
+    for (const tm of team.members) {
+      userStatuses[tm.user.nickname.toLowerCase()] = tm.user.status.toLowerCase()
+    }
 
-        const kicks: Record<string, string[]> = {}
-        for (const vote of channel.kickVotes) {
-          const target = vote.targetUser.nickname
-          kicks[target] = [...(kicks[target] || []), vote.voter.nickname]
-        }
+    return {
+      id: team.id,
+      name: team.name,
+      type: toApiVisibility(team.type),
+      admin: team.admin.nickname,
+      members: team.members.map((m) => m.user.nickname),
+      userStatuses,
+      channels: team.channels
+        .filter((channel) => {
+          if (channel.type === 'PUBLIC' || channel.adminId === user.id) return true
+          const own = channel.members.find((m) => m.userId === user.id)
+          return own?.status === 'ACTIVE' || own?.status === 'INVITED'
+        })
+        .map((channel) => {
+          const byStatus = (status: MembershipStatus) =>
+            channel.members.filter((m) => m.status === status).map((m) => m.user.nickname)
 
-        return {
-          id: channel.id,
-          name: channel.name,
-          type: toApiVisibility(channel.type),
-          admin: channel.admin.nickname,
-          members: byStatus('ACTIVE'),
-          invited: byStatus('INVITED'),
-          banned: byStatus('BANNED'),
-          kicks,
-          lastActivity: channel.lastActivityAt.toMillis(),
-        }
-      }),
-  }))
+          const kicks: Record<string, string[]> = {}
+          for (const vote of channel.kickVotes) {
+            const target = vote.targetUser.nickname
+            kicks[target] = [...(kicks[target] || []), vote.voter.nickname]
+          }
+
+          return {
+            id: channel.id,
+            name: channel.name,
+            type: toApiVisibility(channel.type),
+            admin: channel.admin.nickname,
+            members: byStatus('ACTIVE'),
+            invited: byStatus('INVITED'),
+            banned: byStatus('BANNED'),
+            kicks,
+            lastActivity: channel.lastActivityAt.toMillis(),
+          }
+        }),
+    }
+  })
 }
 
 // --- Tímy (servery) ---

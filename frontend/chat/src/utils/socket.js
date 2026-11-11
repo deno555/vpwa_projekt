@@ -49,3 +49,19 @@ export async function request(event, payload) {
 	if (!response?.ok) throw new Error(response?.error || 'Akcia zlyhala.');
 	return response;
 }
+
+/**
+ * Rýchle asynchrónne odoslanie udalosti (fire-and-forget, napr. pre indikátor písania).
+ * @param {string} event
+ * @param {unknown} payload
+ */
+export function emitEvent(event, payload) {
+	if (socket && socket.connected) {
+		socket.emit(event, payload);
+	}
+}
+
+export function getSocket() {
+	return socket;
+}
+

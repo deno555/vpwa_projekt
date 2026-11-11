@@ -1,25 +1,11 @@
 import type { ApplicationService } from '@adonisjs/core/types'
 import type { Server, Socket } from 'socket.io'
 
-/** Ako často server ruší kanály neaktívne viac ako 30 dní */
 const EXPIRY_CHECK_MS = 60 * 1000
 
 type Ack = (response: Record<string, unknown>) => void
 
-/**
- * WebSocket (socket.io) pre správy v reálnom čase.
- *
- * Klient → server (s potvrdením / ack):
- *   message:send  { channelId, content }    → { ok, message } | { ok: false, error }
- *   message:list  { channelId, beforeId? }  → { ok, messages, hasMore } | { ok: false, error }
- *
- * Server → klient:
- *   message:new    nová správa v kanáli, ktorého je používateľ aktívnym členom
- *   teams:changed  zmenil sa zoznam serverov/kanálov (pozvánka, ban, zrušenie...)
- *
- * Aplikačné moduly (modely, služby) sa importujú až v ready(): providery sa načítavajú
- * pred inicializáciou služieb (napr. hash), ktoré modely pri importe potrebujú.
- */
+
 export default class SocketProvider {
   #io: Server | null = null
   #expiryTimer: NodeJS.Timeout | null = null
@@ -43,6 +29,7 @@ export default class SocketProvider {
       try {
         const user = await this.#authenticate(socket.handshake.auth?.token)
         socket.data.userId = user.id
+        socket.data.nickname = user.nickname
         next()
       } catch {
         next(new Error('Unauthorized'))
@@ -98,6 +85,38 @@ export default class SocketProvider {
         const user = await User.findOrFail(userId)
         return listMessages(user, channelId, beforeId)
       })
+    )
+
+    socket.on('channel:join', (channelId: unknown) => {
+      const id = Number(channelId)
+      if (Number.isFinite(id)) {
+        for (const room of socket.rooms) {
+          if (room.startsWith('channel:')) socket.leave(room)
+        }
+        socket.join(`channel:${id}`)
+      }
+    })
+
+    socket.on('channel:leave', (channelId: unknown) => {
+      const id = Number(channelId)
+      if (Number.isFinite(id)) {
+        socket.leave(`channel:${id}`)
+      }
+    })
+
+    socket.on(
+      'typing',
+      (payload: { channelId?: number; channelName?: string; isTyping?: boolean; text?: string }) => {
+        if (!payload || !payload.channelId) return
+        socket.to(`channel:${payload.channelId}`).emit('typing:update', {
+          channelId: payload.channelId,
+          channelName: payload.channelName,
+          username: socket.data.nickname,
+          isTyping: Boolean(payload.isTyping),
+          text: payload.isTyping ? payload.text || '' : '',
+          time: Date.now(),
+        })
+      }
     )
   }
 

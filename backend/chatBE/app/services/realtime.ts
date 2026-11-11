@@ -20,6 +20,14 @@ export function emitToUsers(userIds: number[], event: string, payload: unknown) 
 }
 
 /**
+ * Rozpošle udalosť všetkým pripojeným klientom (napr. zmena stavu používateľa).
+ */
+export function broadcastEvent(event: string, payload: unknown) {
+  if (!io) return
+  io.emit(event, payload)
+}
+
+/**
  * Oznámi členom tímu (a prípadne ďalším používateľom), že sa zmenil zoznam
  * serverov/kanálov – klient si ho znova načíta.
  */

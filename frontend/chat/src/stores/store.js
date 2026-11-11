@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { isUserMentioned, triggerPing } from '../utils/notifications.js';
 import { apiRequest, ApiError, getStoredToken, storeToken } from '../utils/api.js';
-import { connectSocket, disconnectSocket, request } from '../utils/socket.js';
+import { connectSocket, disconnectSocket, request, emitEvent } from '../utils/socket.js';
 
 // --- Pomocné funkcie pre používateľov ---
 
@@ -114,6 +114,10 @@ export const useAuthStore = defineStore('auth', {
 		/** @param {User} user */
 		setUser(user) {
 			this.user = user;
+			if (user?.nickname && user?.status) {
+				const chatStore = useChatStore();
+				chatStore.applyUserStatus(user.nickname, user.status.toLowerCase());
+			}
 		},
 
 		clearSession() {
@@ -329,6 +333,8 @@ export const useChatStore = defineStore('chat', {
 		servers: [],
 		serversLoaded: false,
 		realtimeConnected: false,
+		/** @type {number | null} ID aktuálne otvoreného kanála (pre Socket.io miestnosť) */
+		activeChannelId: null,
 		/** @type {number | null} */
 		selectedServerId: loadSelectedServerId(),
 		/** @type {Record<string, UserStatus>} */
@@ -466,6 +472,15 @@ export const useChatStore = defineStore('chat', {
 			const vanished = this.servers.flatMap((s) => s.channels).filter((c) => !stillThere.has(c.id));
 			this.servers = servers;
 
+			// Načítame reálne stavy členov serverov z databázy
+			for (const s of servers) {
+				if (s.userStatuses) {
+					for (const [nick, stat] of Object.entries(s.userStatuses)) {
+						this.applyUserStatus(nick, stat);
+					}
+				}
+			}
+
 			// Správy zmiznutých kanálov zahodíme (nový kanál s rovnakým názvom má iné ID)
 			for (const channel of vanished) {
 				delete this.history[channel.id];
@@ -496,6 +511,7 @@ export const useChatStore = defineStore('chat', {
 		resetServers() {
 			disconnectSocket();
 			this.realtimeConnected = false;
+			this.activeChannelId = null;
 			this.servers = [];
 			this.serversLoaded = false;
 			this.history = {};
@@ -529,6 +545,10 @@ export const useChatStore = defineStore('chat', {
 			connectSocket((socket) => {
 				socket.on('connect', () => {
 					this.realtimeConnected = true;
+					// Po (re)pripojení sa znova prihlásime do miestnosti aktívneho kanála
+					if (this.activeChannelId) {
+						emitEvent('channel:join', this.activeChannelId);
+					}
 					// Po výpadku spojenia dočítame, čo sme medzitým zmeškali
 					if (connectedBefore) void this.resync();
 					connectedBefore = true;
@@ -538,6 +558,29 @@ export const useChatStore = defineStore('chat', {
 				});
 				socket.on('message:new', (payload) => this.receiveMessage(payload));
 				socket.on('teams:changed', () => void this.refreshServers());
+				socket.on('user:status', (payload) => {
+					if (!payload?.nickname || !payload?.status) return;
+					this.applyUserStatus(payload.nickname, payload.status);
+				});
+				socket.on('typing:update', (data) => {
+					if (!data) return;
+					// Offline používateľ indikátor písania nedostáva
+					if (this.currentUserStatus === 'offline') return;
+					const me = useAuthStore().currentUser;
+					if (me && isSameUser(me, data.username)) return;
+
+					const channelName =
+						data.channelName || this.findChannelById(data.channelId)?.channel?.name;
+					if (!channelName) return;
+
+					this.applyTyping(
+						channelName,
+						data.username,
+						data.isTyping,
+						data.time || Date.now(),
+						data.text || '',
+					);
+				});
 			});
 		},
 
@@ -578,6 +621,8 @@ export const useChatStore = defineStore('chat', {
 		async openChannel(channelName, { force = false } = {}) {
 			const channel = this.findChannelByName(channelName)?.channel;
 			if (!channel) return;
+			this.activeChannelId = channel.id;
+			emitEvent('channel:join', channel.id);
 			if (this.history[channel.id] && !force) return;
 			try {
 				await this.fetchMessages(channel.id);
@@ -706,7 +751,7 @@ export const useChatStore = defineStore('chat', {
 		// --- Stav používateľa a "is typing" ---
 
 		/**
-		 * Nastaví stav používateľa, uloží ho a rozpošle ostatným kartám.
+		 * Nastaví stav používateľa, uloží ho do DB a rozpošle ostatným kartám aj klientom.
 		 * @param {string} username
 		 * @param {UserStatus} status
 		 */
@@ -717,6 +762,15 @@ export const useChatStore = defineStore('chat', {
 			stored[statusKey(username)] = status;
 			localStorage.setItem('userStatuses', JSON.stringify(stored));
 			broadcast({ type: 'status_updated', username, status });
+
+			// Ak mení stav prihlásený používateľ, zapíšeme to do DB cez API
+			const auth = useAuthStore();
+			if (auth.currentUser && isSameUser(auth.currentUser, username) && auth.token) {
+				void apiRequest('/account/status', {
+					method: 'PATCH',
+					body: { status },
+				}).catch(() => {});
+			}
 		},
 
 		/**
@@ -782,6 +836,16 @@ export const useChatStore = defineStore('chat', {
 				text: isTyping ? text : '',
 				time,
 			});
+
+			const channelInfo = this.findChannelByName(channel);
+			if (channelInfo?.channel?.id) {
+				emitEvent('typing', {
+					channelId: channelInfo.channel.id,
+					channelName: channel,
+					isTyping,
+					text: isTyping ? text : '',
+				});
+			}
 		},
 
 		/**
@@ -792,8 +856,8 @@ export const useChatStore = defineStore('chat', {
 		 * @param {string} [text]
 		 */
 		applyTyping(channel, username, isTyping, time = Date.now(), text = '') {
-			const updated = { ...this.typingUsers[channel] };
-			const updatedTexts = { ...this.typingTexts[channel] };
+			const updated = { ...(this.typingUsers[channel] || {}) };
+			const updatedTexts = { ...(this.typingTexts[channel] || {}) };
 			if (isTyping) {
 				updated[username] = time;
 				updatedTexts[username] = text;
@@ -801,8 +865,8 @@ export const useChatStore = defineStore('chat', {
 				delete updated[username];
 				delete updatedTexts[username];
 			}
-			this.typingUsers[channel] = updated;
-			this.typingTexts[channel] = updatedTexts;
+			this.typingUsers = { ...this.typingUsers, [channel]: updated };
+			this.typingTexts = { ...this.typingTexts, [channel]: updatedTexts };
 		},
 
 		// --- Príkazy ---
@@ -978,9 +1042,11 @@ export const useChatStore = defineStore('chat', {
 						}
 						const members = currentChannel.members;
 						const formatted = members
-							.map((m) =>
-								isSameUser(m, currentChannel.admin) ? `👑 ${m} (správca)` : `• ${m}`,
-							)
+							.map((m) => {
+								const stat = (this.statusOf(m) || 'online').toUpperCase();
+								const prefix = isSameUser(m, currentChannel.admin) ? `👑 ${m} (správca)` : `• ${m}`;
+								return `${prefix} [${stat}]`;
+							})
 							.join('\n');
 						return {
 							success: true,

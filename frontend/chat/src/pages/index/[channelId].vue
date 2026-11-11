@@ -1041,7 +1041,7 @@ export default defineComponent({
 			}
 		},
 
-		sendMessage() {
+		async sendMessage() {
 			if (!this.hasAccess) return;
 			const text = this.newMessage.trim();
 			if (!text) return;
@@ -1050,9 +1050,9 @@ export default defineComponent({
 
 			// Príkaz terminálu
 			if (text.startsWith('/')) {
-				const res = this.chatStore.executeCommand(this.channelName, text);
-				this.chatStore.addSystemMessage(this.channelName, res.message);
 				this.newMessage = '';
+				const res = await this.chatStore.runCommand(this.channelName, text);
+				this.chatStore.addSystemMessage(this.channelName, res.message);
 				if (text.toLowerCase().trim() === '/list') {
 					this.showMembers = true;
 				}

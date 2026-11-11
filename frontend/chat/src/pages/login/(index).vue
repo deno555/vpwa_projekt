@@ -18,7 +18,7 @@
 						<!-- Username / Email Field -->
 						<div class="q-mb-md">
 							<label class="discord-field-label block">
-								Používateľské meno alebo email
+								Prezývka alebo email
 								<span class="discord-field-required">*</span>
 							</label>
 							<q-input
@@ -29,8 +29,8 @@
 								autofocus
 								autocomplete="username"
 								class="discord-input"
-								placeholder="Zadaj meno alebo email"
-								:rules="[(v) => !!v || 'Používateľské meno alebo email je povinné']"
+								placeholder="Zadaj prezývku alebo email"
+								:rules="[(v) => !!v || 'Prezývka alebo email je povinný']"
 								lazy-rules
 							>
 								<template #prepend>
@@ -143,16 +143,16 @@ export default defineComponent({
 			this.loading = true;
 			this.error = '';
 
-			const ok = await this.authStore.login(this.username, this.password);
+			const error = await this.authStore.login(this.username, this.password);
 
 			this.loading = false;
 
-			if (ok) {
+			if (error) {
+				this.error = error;
+			} else {
 				// Po odhlásení ostal uložený stav offline, po prihlásení je používateľ znova online
 				this.chatStore.setUserStatus(this.authStore.currentUser || '', 'online');
 				await this.$router.push('/');
-			} else {
-				this.error = 'Nesprávne používateľské meno alebo heslo.';
 			}
 		},
 	},

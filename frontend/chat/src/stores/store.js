@@ -1,38 +1,8 @@
 import { defineStore } from 'pinia';
 import { isUserMentioned, triggerPing } from '../utils/notifications.js';
+import { apiRequest, ApiError, getStoredToken, storeToken } from '../utils/api.js';
 
-// --- Prihlasovanie ---
-
-/**
- * @typedef {{ username: string, password: string, name?: string, surname?: string, email?: string }} Account
- */
-
-// Hardcoded účty na testovanie
-/** @type {Account[]} */
-const ACCOUNTS = [
-	{ username: 'denis', password: 'admin' },
-	{ username: 'jakub', password: 'admin' },
-];
-
-const savedAccounts =
-	typeof window !== 'undefined' ? localStorage.getItem('registeredAccounts') : null;
-
-/**
- * Nájde existujúci účet podľa prezývky (bez ohľadu na veľkosť písmen).
- * Číta aktuálny stav z localStorage, aby našiel aj účty registrované v inej karte.
- * @param {string} nick
- * @returns {Account | null}
- */
-function findAccountByNick(nick) {
-	let accounts = ACCOUNTS;
-	try {
-		const stored = localStorage.getItem('registeredAccounts');
-		if (stored) accounts = JSON.parse(stored);
-	} catch {
-		// ignore
-	}
-	return accounts.find((a) => isSameUser(a.username, nick)) || null;
-}
+// --- Pomocné funkcie pre používateľov ---
 
 export function isSameUser(u1, u2) {
 	if (!u1 || !u2) return false;
@@ -77,83 +47,168 @@ function loadStoredStatuses() {
 	}
 }
 
-function getInitialCurrentUser() {
-	if (typeof window === 'undefined') return null;
-	return sessionStorage.getItem('currentUser') || localStorage.getItem('currentUser') || null;
-}
+// --- Prihlasovanie (backend /api/v1) ---
+
+/**
+ * @typedef {{
+ *   id: number,
+ *   name: string,
+ *   surname: string,
+ *   nickname: string,
+ *   email: string,
+ *   initials: string
+ * }} User
+ *
+ * @typedef {{
+ *   name: string,
+ *   surname: string,
+ *   nickname: string,
+ *   email: string,
+ *   password: string,
+ *   passwordConfirmation: string
+ * }} SignupPayload
+ */
 
 export const useAuthStore = defineStore('auth', {
 	state: () => ({
+		/** @type {User | null} */
+		user: null,
 		/** @type {string | null} */
-		currentUser: getInitialCurrentUser(),
-		/** @type {Account[]} */
-		accounts: savedAccounts ? JSON.parse(savedAccounts) : [...ACCOUNTS],
+		token: getStoredToken(),
+		/** Overené prezývky z backendu (malé písmená -> presná prezývka) */
+		/** @type {Record<string, string>} */
+		knownUsers: {},
+		initialized: false,
 	}),
 	getters: {
-		isAuthenticated: (state) => !!state.currentUser,
+		/** Prezývka prihláseného používateľa – ostatné časti aplikácie pracujú s ňou */
+		/** @returns {string | null} */
+		currentUser: (state) => state.user?.nickname ?? null,
+		isAuthenticated: (state) => !!state.token && !!state.user,
 	},
 	actions: {
 		/**
-		 * @param {string} username
-		 * @param {string} password
-		 * @returns {Promise<boolean>}
+		 * Po načítaní stránky overí uložený token a načíta profil používateľa.
 		 */
-		async login(username, password) {
-			await new Promise((resolve) => setTimeout(resolve, 500)); // simulate network delay
+		async init() {
+			if (this.initialized) return;
+			this.initialized = true;
+			if (!this.token) return;
 
-			const userLower = (username || '').trim().toLowerCase();
-			const account = this.accounts.find(
-				(a) =>
-					(a.username.toLowerCase() === userLower ||
-						(a.email && a.email.toLowerCase() === userLower)) &&
-					a.password === password,
-			);
-			if (!account) return false;
-
-			this.currentUser = account.username;
-			if (typeof window !== 'undefined') {
-				sessionStorage.setItem('currentUser', account.username);
-				localStorage.setItem('currentUser', account.username);
+			try {
+				const res = await apiRequest('/account/profile', { token: this.token });
+				this.setUser(res.data);
+			} catch (e) {
+				// Neplatný / expirovaný token zahodíme
+				if (e instanceof ApiError && e.status === 401) this.clearSession();
 			}
-			return true;
 		},
+
 		/**
-		 * @param {Account} account
+		 * @param {{ user: User, token: string }} session
+		 */
+		setSession({ user, token }) {
+			this.token = token;
+			storeToken(token);
+			this.setUser(user);
+		},
+
+		/** @param {User} user */
+		setUser(user) {
+			this.user = user;
+			this.knownUsers[user.nickname.toLowerCase()] = user.nickname;
+		},
+
+		clearSession() {
+			this.user = null;
+			this.token = null;
+			storeToken(null);
+		},
+
+		/**
+		 * @param {string} login prezývka alebo email
+		 * @param {string} password
 		 * @returns {Promise<string | null>} chybová správa alebo null pri úspechu
 		 */
-		async register(account) {
-			await new Promise((resolve) => setTimeout(resolve, 500)); // simulate network delay
-
-			const userLower = (account.username || '').trim().toLowerCase();
-			if (this.accounts.some((a) => a.username.toLowerCase() === userLower)) {
-				return 'Používateľ s touto prezývkou už existuje';
-			}
-			if (account.email) {
-				const emailLower = account.email.trim().toLowerCase();
-				if (this.accounts.some((a) => a.email && a.email.toLowerCase() === emailLower)) {
-					return 'Používateľ s týmto emailom už existuje';
+		async login(login, password) {
+			try {
+				const res = await apiRequest('/auth/login', {
+					method: 'POST',
+					body: { uid: login.trim(), password },
+					token: null,
+				});
+				this.setSession(res.data);
+				return null;
+			} catch (e) {
+				if (e instanceof ApiError && e.status === 400) {
+					return 'Nesprávne používateľské meno alebo heslo.';
 				}
+				return e instanceof Error ? e.message : 'Prihlásenie zlyhalo.';
 			}
-
-			this.accounts.push(account);
-			if (typeof window !== 'undefined') {
-				localStorage.setItem('registeredAccounts', JSON.stringify(this.accounts));
-				sessionStorage.setItem('currentUser', account.username);
-				localStorage.setItem('currentUser', account.username);
-			}
-			this.currentUser = account.username;
-
-			return null;
 		},
-		logout() {
-			this.currentUser = null;
-			if (typeof window !== 'undefined') {
-				sessionStorage.removeItem('currentUser');
-				localStorage.removeItem('currentUser');
+
+		/**
+		 * @param {SignupPayload} payload
+		 * @returns {Promise<string | null>} chybová správa alebo null pri úspechu
+		 */
+		async register(payload) {
+			try {
+				const res = await apiRequest('/auth/signup', {
+					method: 'POST',
+					body: payload,
+					token: null,
+				});
+				this.setSession(res.data);
+				return null;
+			} catch (e) {
+				return e instanceof Error ? e.message : 'Registrácia zlyhala.';
+			}
+		},
+
+		/**
+		 * Zneplatní token na backende a odhlási používateľa aj lokálne.
+		 */
+		async logout() {
+			try {
+				if (this.token) await apiRequest('/account/logout', { method: 'POST' });
+			} catch {
+				// Aj keď server nie je dostupný, lokálne sa odhlásime
+			} finally {
+				this.clearSession();
+			}
+		},
+
+		/**
+		 * Overí na backende, či používateľ s danou prezývkou existuje.
+		 * @param {string} nick
+		 * @returns {Promise<string | null>} presná prezývka alebo null
+		 */
+		async fetchUser(nick) {
+			const key = nick.trim().toLowerCase();
+			if (!key) return null;
+			if (this.knownUsers[key]) return this.knownUsers[key];
+			try {
+				const res = await apiRequest(`/users/${encodeURIComponent(nick.trim())}`);
+				this.knownUsers[key] = res.data.nickname;
+				return res.data.nickname;
+			} catch {
+				return null;
 			}
 		},
 	},
 });
+
+/**
+ * Nájde prezývku používateľa overeného cez backend (bez ohľadu na veľkosť písmen).
+ * @param {string} nick
+ * @returns {string | null}
+ */
+function findKnownNick(nick) {
+	return useAuthStore().knownUsers[nick.trim().toLowerCase()] || null;
+}
+
+/** Príkazy, ktorých argument je prezývka existujúceho používateľa */
+const COMMANDS_WITH_USER = ['invite', 'kick'];
 
 // --- Správy, Servery a Kanály ---
 
@@ -1022,6 +1077,20 @@ export const useChatStore = defineStore('chat', {
 		},
 
 		/**
+		 * Spustí príkaz napísaný používateľom. Pri príkazoch s prezývkou (/invite, /kick)
+		 * najprv cez backend overí, či taký používateľ existuje.
+		 * @param {string} currentChannelName
+		 * @param {string} commandLine
+		 */
+		async runCommand(currentChannelName, commandLine) {
+			const [command, nick] = commandLine.trim().slice(1).split(/\s+/);
+			if (nick && COMMANDS_WITH_USER.includes((command || '').toLowerCase())) {
+				await useAuthStore().fetchUser(nick);
+			}
+			return this.executeCommand(currentChannelName, commandLine);
+		},
+
+		/**
 		 * Spracovanie príkazov z príkazového riadka
 		 * @param {string} currentChannelName
 		 * @param {string} commandLine
@@ -1229,15 +1298,13 @@ export const useChatStore = defineStore('chat', {
 					if (args.length === 0 || !args[0]) {
 						return { success: false, message: 'Použitie: /invite <nickName>' };
 					}
-					const targetAccount = findAccountByNick(args[0].trim());
-					if (!targetAccount) {
+					const targetNick = findKnownNick(args[0].trim());
+					if (!targetNick) {
 						return {
 							success: false,
 							message: `Používateľ ${args[0].trim()} neexistuje.`,
 						};
 					}
-					const targetNick = targetAccount.username;
-
 					if (isSameUser(targetNick, currentUser)) {
 						return { success: false, message: 'Nemôžeš pozvať sám seba.' };
 					}
@@ -1427,15 +1494,13 @@ export const useChatStore = defineStore('chat', {
 					if (args.length === 0 || !args[0]) {
 						return { success: false, message: 'Použitie: /kick <nickName>' };
 					}
-					const targetAccount = findAccountByNick(args[0].trim());
-					if (!targetAccount) {
+					const targetNick = findKnownNick(args[0].trim());
+					if (!targetNick) {
 						return {
 							success: false,
 							message: `Používateľ ${args[0].trim()} neexistuje.`,
 						};
 					}
-					const targetNick = targetAccount.username;
-
 					if (!currentChannel) {
 						return { success: false, message: 'Nie si v žiadnom kanáli.' };
 					}

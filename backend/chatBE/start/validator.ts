@@ -12,7 +12,32 @@
 */
 
 import { DateTime } from 'luxon'
-import { VineDate } from '@vinejs/vine'
+import vine, { SimpleMessagesProvider, VineDate } from '@vinejs/vine'
+
+/**
+ * Slovenské chybové hlášky, ktoré frontend zobrazuje používateľovi.
+ */
+vine.messagesProvider = new SimpleMessagesProvider(
+  {
+    'required': 'Pole {{ field }} je povinné',
+    'string': 'Pole {{ field }} musí byť text',
+    'email': 'Neplatný formát emailu',
+    'minLength': 'Pole {{ field }} musí mať aspoň {{ min }} znakov',
+    'maxLength': 'Pole {{ field }} môže mať najviac {{ max }} znakov',
+    'sameAs': 'Heslá sa nezhodujú',
+    'nickname.regex': 'Prezývka môže obsahovať iba písmená bez diakritiky, číslice a znaky _ . -',
+    'nickname.database.unique': 'Používateľ s touto prezývkou už existuje',
+    'email.database.unique': 'Používateľ s týmto emailom už existuje',
+  },
+  {
+    name: 'meno',
+    surname: 'priezvisko',
+    nickname: 'prezývka',
+    email: 'email',
+    password: 'heslo',
+    passwordConfirmation: 'potvrdenie hesla',
+  }
+)
 
 declare module '@vinejs/vine/types' {
   interface VineGlobalTransforms {

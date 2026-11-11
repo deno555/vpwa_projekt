@@ -33,5 +33,10 @@ router
       .prefix('account')
       .as('profile')
       .use(middleware.auth())
+
+    router
+      .get('users/:nickname', [controllers.Users, 'show'])
+      .as('users.show')
+      .use(middleware.auth())
   })
   .prefix('/api/v1')

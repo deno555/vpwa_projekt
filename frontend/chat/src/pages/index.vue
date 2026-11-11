@@ -726,7 +726,7 @@ export default defineComponent({
 		async logout() {
 			const username = this.authStore.currentUser;
 			if (username) this.chatStore.setUserStatus(username, 'offline');
-			this.authStore.logout();
+			await this.authStore.logout();
 			await this.$router.push('/login');
 		},
 

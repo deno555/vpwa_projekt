@@ -79,7 +79,12 @@
 								autocomplete="username"
 								class="discord-input"
 								placeholder="napr. herny_kral"
-								:rules="[(v) => !!v || 'Prezývka je povinná']"
+								:rules="[
+									(v) => !!v || 'Prezývka je povinná',
+									(v) =>
+										/^[a-zA-Z0-9_.-]{2,100}$/.test(v.trim()) ||
+										'2–100 znakov: písmená bez diakritiky, číslice a _ . -',
+								]"
 								lazy-rules
 							>
 								<template #prepend>
@@ -250,11 +255,12 @@ export default defineComponent({
 			this.error = '';
 
 			const error = await this.authStore.register({
-				username: this.nickname.trim(),
-				password: this.password,
 				name: this.name.trim(),
 				surname: this.surname.trim(),
+				nickname: this.nickname.trim(),
 				email: this.email.trim(),
+				password: this.password,
+				passwordConfirmation: this.passwordConfirmation,
 			});
 
 			this.loading = false;

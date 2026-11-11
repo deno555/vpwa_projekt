@@ -34,10 +34,17 @@ export default defineRouter((/* { store, ssrContext } */) => {
 		history: createHistory(import.meta.env.QUASAR_VUE_ROUTER_BASE),
 	});
 
-	Router.beforeEach((to) => {
+	Router.beforeEach(async (to) => {
 		const auth = useAuthStore();
-		if (to.path !== '/login' && to.path !== '/register' && !auth.isAuthenticated) {
+		// Pri prvej navigácii overí uložený token na backende
+		await auth.init();
+
+		const isAuthPage = to.path === '/login' || to.path === '/register';
+		if (!isAuthPage && !auth.isAuthenticated) {
 			return '/login';
+		}
+		if (isAuthPage && auth.isAuthenticated) {
+			return '/';
 		}
 	});
 

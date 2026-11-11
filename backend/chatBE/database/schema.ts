@@ -32,6 +32,25 @@ export class AuthAccessTokenSchema extends BaseModel {
   declare updatedAt: DateTime | null
 }
 
+export class ChannelSchema extends BaseModel {
+  static $columns = ['adminId', 'createdAt', 'id', 'lastActivityAt', 'name', 'teamId', 'type'] as const
+  $columns = ChannelSchema.$columns
+  @column()
+  declare adminId: number
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column({ isPrimary: true })
+  declare id: number
+  @column.dateTime()
+  declare lastActivityAt: DateTime
+  @column()
+  declare name: string
+  @column()
+  declare teamId: number
+  @column()
+  declare type: string
+}
+
 export class ChannelKickVoteSchema extends BaseModel {
   static $columns = ['createdAt', 'channelId', 'id', 'targetUserId', 'voterId'] as const
   $columns = ChannelKickVoteSchema.$columns
@@ -64,38 +83,6 @@ export class ChannelMemberSchema extends BaseModel {
   declare userId: number
 }
 
-export class ChannelSchema extends BaseModel {
-  static $columns = ['adminId', 'createdAt', 'id', 'lastActivityAt', 'name', 'teamId', 'type'] as const
-  $columns = ChannelSchema.$columns
-  @column()
-  declare adminId: number
-  @column.dateTime({ autoCreate: true })
-  declare createdAt: DateTime
-  @column({ isPrimary: true })
-  declare id: number
-  @column.dateTime()
-  declare lastActivityAt: DateTime
-  @column()
-  declare name: string
-  @column()
-  declare teamId: number
-  @column()
-  declare type: string
-}
-
-export class MessageMentionSchema extends BaseModel {
-  static $columns = ['createdAt', 'id', 'messageId', 'userId'] as const
-  $columns = MessageMentionSchema.$columns
-  @column.dateTime({ autoCreate: true })
-  declare createdAt: DateTime
-  @column({ isPrimary: true })
-  declare id: number
-  @column()
-  declare messageId: number
-  @column()
-  declare userId: number
-}
-
 export class MessageSchema extends BaseModel {
   static $columns = ['authorId', 'content', 'createdAt', 'channelId', 'id', 'isSystem'] as const
   $columns = MessageSchema.$columns
@@ -113,15 +100,15 @@ export class MessageSchema extends BaseModel {
   declare isSystem: boolean
 }
 
-export class TeamMemberSchema extends BaseModel {
-  static $columns = ['id', 'joinedAt', 'teamId', 'userId'] as const
-  $columns = TeamMemberSchema.$columns
+export class MessageMentionSchema extends BaseModel {
+  static $columns = ['createdAt', 'id', 'messageId', 'userId'] as const
+  $columns = MessageMentionSchema.$columns
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
   @column({ isPrimary: true })
   declare id: number
-  @column.dateTime()
-  declare joinedAt: DateTime
   @column()
-  declare teamId: number
+  declare messageId: number
   @column()
   declare userId: number
 }
@@ -139,6 +126,19 @@ export class TeamSchema extends BaseModel {
   declare name: string
   @column()
   declare type: string
+}
+
+export class TeamMemberSchema extends BaseModel {
+  static $columns = ['id', 'joinedAt', 'teamId', 'userId'] as const
+  $columns = TeamMemberSchema.$columns
+  @column({ isPrimary: true })
+  declare id: number
+  @column.dateTime()
+  declare joinedAt: DateTime
+  @column()
+  declare teamId: number
+  @column()
+  declare userId: number
 }
 
 export class UserSchema extends BaseModel {

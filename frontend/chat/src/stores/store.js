@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { isUserMentioned, triggerPing } from '../utils/notifications.js';
 import { apiRequest, ApiError, getStoredToken, storeToken } from '../utils/api.js';
+import { connectSocket, disconnectSocket, request } from '../utils/socket.js';
 
 // --- Pomocné funkcie pre používateľov ---
 
@@ -179,10 +180,18 @@ export const useAuthStore = defineStore('auth', {
 // --- Správy, Servery a Kanály ---
 
 /**
- * Tímy (servery) a kanály spravuje backend (/api/v1/teams, /api/v1/channels).
- * Správy sú zatiaľ uložené lokálne v prehliadači.
+ * Tímy (servery) a kanály spravuje backend cez REST (/api/v1/teams, /api/v1/channels).
+ * Správy sa posielajú a prijímajú cez WebSocket (src/utils/socket.js).
  *
- * @typedef {{ id: number, author: string, text: string, time: string, isSystem?: boolean }} Message
+ * @typedef {{
+ *   id: number,
+ *   author: string,
+ *   text: string,
+ *   time: string,
+ *   createdAt: string,
+ *   isSystem?: boolean,
+ *   isLocal?: boolean
+ * }} Message
  * @typedef {{
  *   id: number,
  *   name: string,
@@ -208,47 +217,50 @@ export const useAuthStore = defineStore('auth', {
 // Kanál bez novej správy dlhšie ako 30 dní zaniká (stráži backend)
 export const CHANNEL_INACTIVITY_LIMIT_MS = 30 * 24 * 60 * 60 * 1000;
 
-function currentTime() {
-	return new Date().toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' });
+// Staré kľúče z obdobia, keď boli účty, servery a správy iba v prehliadači
+if (typeof window !== 'undefined') {
+	for (const key of [
+		'chatHistory',
+		'chatServers',
+		'chatDataVersion',
+		'registeredAccounts',
+		'currentUser',
+	]) {
+		localStorage.removeItem(key);
+	}
 }
 
 /**
- * @param {string} channel
+ * Popis času správy: "Dnes o 14:05", "Včera o 9:30", "3. 11. 2026 o 18:00".
+ * @param {Date} date
+ */
+function timeLabel(date) {
+	const time = date.toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' });
+	const today = new Date();
+	const yesterday = new Date();
+	yesterday.setDate(today.getDate() - 1);
+	if (date.toDateString() === today.toDateString()) return `Dnes o ${time}`;
+	if (date.toDateString() === yesterday.toDateString()) return `Včera o ${time}`;
+	return `${date.toLocaleDateString('sk-SK')} o ${time}`;
+}
+
+/**
+ * Správa z backendu v tvare, s ktorým pracujú komponenty.
+ * @param {{ id: number, author: string, text: string, isSystem: boolean, createdAt: string }} raw
  * @returns {Message}
  */
-function welcomeMessage(channel) {
+function toMessage(raw) {
 	return {
-		id: 1,
-		author: 'Systém',
-		text: `Toto je prvá uvítacia správa v kanáli #${channel}. Napíš /help pre zoznam dostupných príkazov.`,
-		time: currentTime(),
-		isSystem: true,
+		id: raw.id,
+		author: raw.author,
+		text: raw.text,
+		isSystem: raw.isSystem,
+		createdAt: raw.createdAt,
+		time: timeLabel(new Date(raw.createdAt)),
 	};
 }
 
-/** @returns {Record<string, Message[]>} */
-function loadStoredHistory() {
-	try {
-		return JSON.parse(localStorage.getItem('chatHistory') || '{}') || {};
-	} catch {
-		return {};
-	}
-}
-
-/**
- * Uloží históriu zlúčenú s tou, ktorá už je v localStorage, aby karta so starou
- * kópiou (napr. offline používateľ) neprepísala správy, ktoré medzitým pribudli.
- * @param {Record<string, Message[]>} history
- */
-function persistHistory(history) {
-	const merged = loadStoredHistory();
-	for (const [channel, messages] of Object.entries(history)) {
-		const stored = merged[channel] || [];
-		const storedIds = new Set(stored.map((m) => m.id));
-		merged[channel] = [...stored, ...messages.filter((m) => !storedIds.has(m.id))];
-	}
-	localStorage.setItem('chatHistory', JSON.stringify(merged));
-}
+let localMessageId = 0;
 
 function loadSelectedServerId() {
 	const saved = typeof window !== 'undefined' ? localStorage.getItem('chatSelectedServerId') : null;
@@ -281,6 +293,7 @@ function failure(e) {
 	return { success: false, message: e instanceof Error ? e.message : 'Akcia zlyhala.' };
 }
 
+// BroadcastChannel synchronizuje medzi kartami iba "is typing" a stav používateľa
 let bc = null;
 if (typeof window !== 'undefined' && typeof window.BroadcastChannel !== 'undefined') {
 	try {
@@ -302,8 +315,12 @@ function broadcast(data) {
 
 export const useChatStore = defineStore('chat', {
 	state: () => ({
-		/** @type {Record<string, Message[]>} */
-		history: loadStoredHistory(),
+		/** Načítané správy podľa ID kanála (od najstarších po najnovšie) */
+		/** @type {Record<number, Message[]>} */
+		history: {},
+		/** Či má kanál na serveri ešte staršie správy */
+		/** @type {Record<number, boolean>} */
+		hasMore: {},
 		/** @type {Record<string, Record<string, number>>} */
 		typingUsers: {},
 		/** @type {Record<string, Record<string, string>>} */
@@ -311,6 +328,7 @@ export const useChatStore = defineStore('chat', {
 		/** @type {Server[]} */
 		servers: [],
 		serversLoaded: false,
+		realtimeConnected: false,
 		/** @type {number | null} */
 		selectedServerId: loadSelectedServerId(),
 		/** @type {Record<string, UserStatus>} */
@@ -340,8 +358,20 @@ export const useChatStore = defineStore('chat', {
 		currentChannels() {
 			return this.currentServer ? this.currentServer.channels : [];
 		},
-		messagesFor: (state) => (/** @type {string} */ channel) =>
-			state.history[channel] || [welcomeMessage(channel)],
+		/** @returns {(channelName: string) => Message[]} */
+		messagesFor() {
+			return (channelName) => {
+				const id = this.findChannelByName(channelName)?.channel.id;
+				return (id && this.history[id]) || [];
+			};
+		},
+		/** @returns {(channelName: string) => boolean} */
+		hasMoreFor() {
+			return (channelName) => {
+				const id = this.findChannelByName(channelName)?.channel.id;
+				return !!id && !!this.hasMore[id];
+			};
+		},
 		typingUsersFor: (state) => (/** @type {string} */ channel) => {
 			const channelMap = state.typingUsers[channel];
 			if (!channelMap) return [];
@@ -397,6 +427,16 @@ export const useChatStore = defineStore('chat', {
 				return null;
 			};
 		},
+		/** @returns {(channelId: number) => { channel: Channel, server: Server } | null} */
+		findChannelById() {
+			return (channelId) => {
+				for (const server of this.servers) {
+					const found = server.channels.find((c) => c.id === channelId);
+					if (found) return { channel: found, server };
+				}
+				return null;
+			};
+		},
 		isMember() {
 			return (/** @type {string} */ channelName, /** @type {string} */ username) => {
 				const info = this.findChannelByName(channelName);
@@ -411,6 +451,8 @@ export const useChatStore = defineStore('chat', {
 		},
 	},
 	actions: {
+		// --- Servery a kanály ---
+
 		/**
 		 * Načíta servery a kanály prihláseného používateľa z backendu.
 		 * Kanály, ktoré medzitým zanikli pre neaktivitu, oznámi layoutu.
@@ -420,18 +462,18 @@ export const useChatStore = defineStore('chat', {
 			/** @type {Server[]} */
 			const servers = res.data;
 
-			if (this.serversLoaded) {
-				const limit = Date.now() - CHANNEL_INACTIVITY_LIMIT_MS;
-				const stillThere = new Set(servers.flatMap((s) => s.channels.map((c) => c.id)));
-				const expired = this.servers
-					.flatMap((s) => s.channels)
-					.filter((c) => !stillThere.has(c.id) && c.lastActivity < limit)
-					.map((c) => c.name);
-				this.servers = servers;
-				if (expired.length > 0) this.applyExpiredChannels(expired);
-			} else {
-				this.servers = servers;
+			const stillThere = new Set(servers.flatMap((s) => s.channels.map((c) => c.id)));
+			const vanished = this.servers.flatMap((s) => s.channels).filter((c) => !stillThere.has(c.id));
+			this.servers = servers;
+
+			// Správy zmiznutých kanálov zahodíme (nový kanál s rovnakým názvom má iné ID)
+			for (const channel of vanished) {
+				delete this.history[channel.id];
+				delete this.hasMore[channel.id];
 			}
+			const limit = Date.now() - CHANNEL_INACTIVITY_LIMIT_MS;
+			const expired = vanished.filter((c) => c.lastActivity < limit).map((c) => c.name);
+			if (this.serversLoaded && expired.length > 0) this.lastExpiredChannels = expired;
 
 			this.serversLoaded = true;
 			if (!servers.some((s) => s.id === this.selectedServerId)) {
@@ -439,22 +481,25 @@ export const useChatStore = defineStore('chat', {
 			}
 		},
 
-		/** Po odhlásení zahodí dáta predchádzajúceho používateľa */
-		resetServers() {
-			this.servers = [];
-			this.serversLoaded = false;
-		},
-
 		/**
-		 * Po zmene na backende načíta nový stav a oznámi to ostatným kartám.
+		 * Po zmene na backende načíta nový stav (ostatné karty to zistia cez WebSocket).
 		 */
 		async refreshServers() {
 			try {
 				await this.loadServers();
 			} catch {
-				// ignore – ďalší pokus príde pri najbližšom obnovení
+				// ignore – ďalší pokus príde pri najbližšej zmene
 			}
-			broadcast({ type: 'servers_changed' });
+		},
+
+		/** Po odhlásení zahodí dáta predchádzajúceho používateľa a odpojí WebSocket */
+		resetServers() {
+			disconnectSocket();
+			this.realtimeConnected = false;
+			this.servers = [];
+			this.serversLoaded = false;
+			this.history = {};
+			this.hasMore = {};
 		},
 
 		/** @param {number} serverId */
@@ -473,6 +518,192 @@ export const useChatStore = defineStore('chat', {
 		setLeftDrawer(open) {
 			this.leftDrawerOpen = Boolean(open);
 		},
+
+		// --- WebSocket ---
+
+		/**
+		 * Pripojí sa na WebSocket: prijíma nové správy a zmeny zoznamu kanálov.
+		 */
+		connectRealtime() {
+			let connectedBefore = false;
+			connectSocket((socket) => {
+				socket.on('connect', () => {
+					this.realtimeConnected = true;
+					// Po výpadku spojenia dočítame, čo sme medzitým zmeškali
+					if (connectedBefore) void this.resync();
+					connectedBefore = true;
+				});
+				socket.on('disconnect', () => {
+					this.realtimeConnected = false;
+				});
+				socket.on('message:new', (payload) => this.receiveMessage(payload));
+				socket.on('teams:changed', () => void this.refreshServers());
+			});
+		},
+
+		/**
+		 * Znova načíta servery a správy otvorených kanálov (po výpadku alebo návrate z offline).
+		 */
+		async resync() {
+			await this.refreshServers();
+			const opened = Object.keys(this.history).map(Number);
+			this.history = {};
+			this.hasMore = {};
+			await Promise.all(opened.map((id) => this.fetchMessages(id).catch(() => {})));
+		},
+
+		// --- Správy ---
+
+		/**
+		 * Načíta stránku histórie kanála (najnovšie, alebo staršie ako beforeId).
+		 * @param {number} channelId
+		 * @param {number} [beforeId]
+		 */
+		async fetchMessages(channelId, beforeId) {
+			const res = await request('message:list', { channelId, beforeId });
+			const page = res.messages.map(toMessage);
+			const current = this.history[channelId] || [];
+			// Staršie správy idú navrch, prvá stránka zachová lokálne hlášky príkazov
+			this.history[channelId] = beforeId
+				? [...page, ...current]
+				: [...page, ...current.filter((m) => m.isLocal)];
+			this.hasMore[channelId] = res.hasMore;
+		},
+
+		/**
+		 * Pri otvorení kanála načíta jeho najnovšie správy (iba raz, potom chodia cez WebSocket).
+		 * @param {string} channelName
+		 * @param {{ force?: boolean }} [options]
+		 */
+		async openChannel(channelName, { force = false } = {}) {
+			const channel = this.findChannelByName(channelName)?.channel;
+			if (!channel) return;
+			if (this.history[channel.id] && !force) return;
+			try {
+				await this.fetchMessages(channel.id);
+			} catch {
+				// Napr. súkromný kanál bez členstva – správy sa nezobrazia
+				this.history[channel.id] = this.history[channel.id] || [];
+				this.hasMore[channel.id] = false;
+			}
+		},
+
+		/**
+		 * Dočíta staršiu stránku správ (infinite scroll).
+		 * @param {string} channelName
+		 * @returns {Promise<boolean>} či sú na serveri ešte staršie správy
+		 */
+		async loadOlderMessages(channelName) {
+			const channel = this.findChannelByName(channelName)?.channel;
+			if (!channel || !this.hasMore[channel.id]) return false;
+			const oldest = (this.history[channel.id] || []).find((m) => !m.isLocal);
+			try {
+				await this.fetchMessages(channel.id, oldest?.id);
+			} catch {
+				this.hasMore[channel.id] = false;
+			}
+			return !!this.hasMore[channel.id];
+		},
+
+		/**
+		 * Pridá správu do načítanej histórie kanála (bez duplikátov).
+		 * @param {number} channelId
+		 * @param {Message} message
+		 */
+		appendMessage(channelId, message) {
+			const list = this.history[channelId];
+			if (!list) return; // história sa načíta celá pri otvorení kanála
+			if (!list.some((m) => m.id === message.id)) list.push(message);
+		},
+
+		/**
+		 * Nová správa z WebSocketu.
+		 * @param {{ channelId: number, channelName: string, teamName: string } & Parameters<typeof toMessage>[0]} payload
+		 */
+		receiveMessage(payload) {
+			// Offline používateľ správy nedostáva (dočítajú sa po prepnutí na online)
+			if (this.currentUserStatus === 'offline') return;
+
+			const message = toMessage(payload);
+			this.appendMessage(payload.channelId, message);
+
+			const me = useAuthStore().currentUser;
+			// Vlastné správy (aj z inej karty) neoznamujeme
+			if (!me || isSameUser(message.author, me)) return;
+
+			const myStatus = this.currentUserStatus;
+			// Nerušiť (dnd) -> žiadne notifikácie
+			if (myStatus === 'dnd') return;
+
+			const isMentioned = isUserMentioned(message.text, me);
+			// V stave "mentions" (Iba označenia): notifikácia iba pri @označení
+			// V stave "online": notifikácia pri každej správe (zvýraznená ak je označený)
+			if (myStatus === 'mentions' && !isMentioned) return;
+			triggerPing(payload.channelName, message, isMentioned, payload.teamName);
+		},
+
+		/**
+		 * Odoslanie správy cez WebSocket – server overí členstvo a správu rozpošle členom.
+		 * @param {string} channelName
+		 * @param {string} rawText
+		 */
+		async sendMessage(channelName, rawText) {
+			const text = rawText.trim();
+			if (text === '') return;
+
+			const currentUser = useAuthStore().currentUser || '';
+			const channel = this.findChannelByName(channelName)?.channel;
+			if (!channel) return;
+
+			// Rýchla odozva bez čakania na server (server to overí aj sám)
+			if (userListIncludes(channel.banned, currentUser)) {
+				this.addSystemMessage(
+					channelName,
+					`Nemôžeš odoslať správu, pretože máš v kanáli #${channelName} trvalý ban.`,
+				);
+				return;
+			}
+			if (!userListIncludes(channel.members, currentUser)) {
+				this.addSystemMessage(
+					channelName,
+					`Nie si členom kanála #${channelName}. Ak sa chceš pridať, použi príkaz /join ${channelName}.`,
+				);
+				return;
+			}
+
+			try {
+				const res = await request('message:send', { channelId: channel.id, content: text });
+				this.appendMessage(channel.id, toMessage(res.message));
+			} catch (e) {
+				this.addSystemMessage(channelName, e instanceof Error ? e.message : String(e));
+			}
+		},
+
+		/**
+		 * Lokálna hláška (výsledok príkazu) – vidí ju iba tento používateľ, neukladá sa.
+		 * @param {string} channelName
+		 * @param {string} text
+		 */
+		addSystemMessage(channelName, text) {
+			const channel = this.findChannelByName(channelName)?.channel;
+			if (!channel) return;
+			if (!this.history[channel.id]) {
+				this.history[channel.id] = [];
+				this.hasMore[channel.id] = false;
+			}
+			const now = new Date();
+			this.history[channel.id].push({
+				id: -++localMessageId,
+				author: 'Systém',
+				text,
+				isSystem: true,
+				isLocal: true,
+				createdAt: now.toISOString(),
+				time: timeLabel(now),
+			});
+		},
+
+		// --- Stav používateľa a "is typing" ---
 
 		/**
 		 * Nastaví stav používateľa, uloží ho a rozpošle ostatným kartám.
@@ -524,88 +755,12 @@ export const useChatStore = defineStore('chat', {
 			if (
 				prev === 'offline' &&
 				status !== 'offline' &&
-				isSameUser(username, auth.currentUser)
+				isSameUser(username, auth.currentUser) &&
+				auth.isAuthenticated &&
+				this.serversLoaded
 			) {
-				this.reloadFromStorage();
+				void this.resync();
 			}
-		},
-
-		reloadFromStorage() {
-			this.history = loadStoredHistory();
-			if (useAuthStore().isAuthenticated) void this.refreshServers();
-		},
-
-		/**
-		 * Zaznamená novú správu v kanáli (posúva hranicu 30-dňovej neaktivity).
-		 * @param {string} channelName
-		 */
-		touchChannel(channelName) {
-			const info = this.findChannelByName(channelName);
-			if (!info) return;
-			info.channel.lastActivity = Date.now();
-			apiRequest(`/channels/${info.channel.id}/activity`, { method: 'POST' }).catch(() => {
-				// ignore – aktivita sa zaznamená pri ďalšej správe
-			});
-		},
-
-		/**
-		 * Odstráni históriu kanálov zaniknutých pre neaktivitu a oznámi to layoutu.
-		 * @param {string[]} names
-		 */
-		applyExpiredChannels(names) {
-			this.removeChannelHistory(names);
-			this.lastExpiredChannels = names;
-		},
-
-		/**
-		 * Zmaže históriu zrušeného kanála (/quit, /cancel správcom) a oznámi to ostatným kartám,
-		 * aby nový kanál s rovnakým názvom nezačínal so starými správami.
-		 * @param {string} name
-		 */
-		discardDeletedChannel(name) {
-			this.removeChannelHistory([name]);
-			broadcast({ type: 'channels_deleted', names: [name] });
-		},
-
-		/**
-		 * Odstráni históriu kanálov (aj z localStorage, inak by ju persistHistory vrátil).
-		 * @param {string[]} names
-		 */
-		removeChannelHistory(names) {
-			// História je kľúčovaná názvom - nemažeme ju, ak kanál s rovnakým menom ešte existuje
-			const stillUsed = new Set(
-				this.servers.flatMap((s) => s.channels.map((c) => c.name.toLowerCase())),
-			);
-			const toDelete = names.filter((n) => !stillUsed.has(n.toLowerCase()));
-
-			const history = { ...this.history };
-			const stored = loadStoredHistory();
-			for (const name of toDelete) {
-				delete history[name];
-				delete stored[name];
-			}
-			this.history = history;
-			localStorage.setItem('chatHistory', JSON.stringify(stored));
-		},
-
-		/**
-		 * @param {string} channel
-		 * @param {string} text
-		 */
-		addSystemMessage(channel, text) {
-			if (!this.history[channel]) {
-				this.history[channel] = [welcomeMessage(channel)];
-			}
-			const msg = {
-				id: Date.now() + Math.floor(Math.random() * 1000),
-				author: 'Systém',
-				text,
-				time: currentTime(),
-				isSystem: true,
-			};
-			this.history[channel].push(msg);
-			persistHistory(this.history);
-			broadcast({ type: 'new_message', channel, message: msg });
 		},
 
 		/**
@@ -650,81 +805,17 @@ export const useChatStore = defineStore('chat', {
 			this.typingTexts[channel] = updatedTexts;
 		},
 
-		/**
-		 * @param {string} channel
-		 * @param {string} rawText
-		 */
-		sendMessage(channel, rawText) {
-			const text = rawText.trim();
-			if (text === '') return;
-
-			const auth = useAuthStore();
-			const currentUser = auth.currentUser || 'Neznámy';
-
-			// Overenie členstva a banu
-			if (this.isBanned(channel, currentUser)) {
-				this.addSystemMessage(
-					channel,
-					`Nemôžeš odoslať správu, pretože máš v kanáli #${channel} trvalý ban.`,
-				);
-				return;
-			}
-
-			if (!this.isMember(channel, currentUser)) {
-				this.addSystemMessage(
-					channel,
-					`Nie si členom kanála #${channel}. Ak sa chceš pridať, použi príkaz /join ${channel}.`,
-				);
-				return;
-			}
-
-			if (!this.history[channel]) {
-				this.history[channel] = [welcomeMessage(channel)];
-			}
-
-			const msg = {
-				id: Date.now(),
-				author: currentUser,
-				text,
-				time: currentTime(),
-			};
-
-			this.history[channel].push(msg);
-			persistHistory(this.history);
-			this.touchChannel(channel);
-
-			const chanInfo = this.findChannelByName(channel);
-			const teamName = chanInfo?.server?.name || this.currentServer?.name || '';
-
-			// Notifikácie dostávajú iba ostatní používatelia (bc.onmessage), nie odosielateľ
-			broadcast({ type: 'new_message', channel, message: msg, team: teamName });
-		},
+		// --- Príkazy ---
 
 		/**
-		 * @param {string} channel
-		 * @param {Message} message
-		 */
-		applyNewMessage(channel, message) {
-			if (!this.history[channel]) {
-				this.history[channel] = [welcomeMessage(channel)];
-			}
-			if (!this.history[channel].some((m) => m.id === message.id)) {
-				this.history[channel].push(message);
-				persistHistory(this.history);
-			}
-		},
-
-		/**
-		 * Zavolá akciu backendu, pridá systémovú správu do kanála a obnoví zoznam serverov.
+		 * Zavolá akciu backendu a obnoví zoznam serverov.
+		 * Systémovú správu do kanála (napr. "X sa pripojil") vytvorí a rozpošle backend.
 		 * @param {string} path
 		 * @param {{ method?: string, body?: any }} [options]
 		 */
 		async serverAction(path, options = { method: 'POST' }) {
 			const res = await apiRequest(path, { method: 'POST', ...options });
 			await this.refreshServers();
-			if (res?.announcement && res.channel) {
-				this.addSystemMessage(res.channel, res.announcement);
-			}
 			return res;
 		},
 
@@ -802,6 +893,8 @@ export const useChatStore = defineStore('chat', {
 						const res = await this.serverAction(`/teams/${server.id}/channels`, {
 							body: { name: target, type: isPrivate ? 'private' : 'public' },
 						});
+						// Nové členstvo – načítame históriu kanála znova (predtým mohla byť nedostupná)
+						await this.openChannel(res.channel, { force: true });
 						return { success: true, message: res.message, redirectUrl: '/' + res.channel };
 					}
 
@@ -869,7 +962,6 @@ export const useChatStore = defineStore('chat', {
 										method: 'DELETE',
 									})
 								: await this.serverAction(`/channels/${currentChannel.id}/leave`);
-						if (res.deleted) this.discardDeletedChannel(currentChannel.name);
 						return { success: true, message: res.message, redirectUrl: this.fallbackUrl() };
 					}
 
@@ -932,52 +1024,13 @@ if (bc) {
 		const data = event.data;
 		if (!data) return;
 		const chatStore = useChatStore();
-		// Offline používateľ nedostáva správy ani typing (načítajú sa po prepnutí na online)
-		const isOffline = chatStore.currentUserStatus === 'offline';
 		if (data.type === 'typing') {
-			if (isOffline) return;
+			// Offline používateľ nedostáva typing
+			if (chatStore.currentUserStatus === 'offline') return;
 			if (data.isTyping && chatStore.statusOf(data.username) === 'offline') return;
 			chatStore.applyTyping(data.channel, data.username, data.isTyping, data.time, data.text);
-		} else if (data.type === 'new_message') {
-			if (isOffline) return;
-			chatStore.applyNewMessage(data.channel, data.message);
-
-			const auth = useAuthStore();
-			const me = auth.currentUser;
-			if (!me) return;
-
-			// Vlastné správy prijaté cez broadcast z inej karty/okna neoznamujeme
-			if (isSameUser(data.message.author, me)) return;
-
-			const myStatus = chatStore.currentUserStatus;
-
-			// Nerušiť (dnd) -> žiadne notifikácie
-			if (myStatus === 'dnd' || myStatus === 'offline') return;
-
-			const chanInfo = chatStore.findChannelByName(data.channel);
-			const teamName = data.team || chanInfo?.server?.name || '';
-			const isMentioned = isUserMentioned(data.message.text, me);
-
-			// V stave "mentions" (Iba označenia): notifikácia iba pri @označení
-			// V stave "online": notifikácia pri každej správe (zvýraznená ak je označený)
-			if (myStatus === 'mentions') {
-				if (isMentioned) {
-					triggerPing(data.channel, data.message, true, teamName);
-				}
-			} else if (myStatus === 'online') {
-				triggerPing(data.channel, data.message, isMentioned, teamName);
-			}
-		} else if (data.type === 'servers_changed') {
-			// Iná karta zmenila servery/kanály na backende – načítame aktuálny stav
-			if (useAuthStore().isAuthenticated) {
-				chatStore.loadServers().catch(() => {
-					// ignore
-				});
-			}
 		} else if (data.type === 'status_updated') {
 			chatStore.applyUserStatus(data.username, data.status);
-		} else if (data.type === 'channels_deleted') {
-			chatStore.removeChannelHistory(data.names);
 		}
 	};
 }
@@ -992,17 +1045,6 @@ if (typeof window !== 'undefined') {
 					if (store.userStatuses[username] !== status) {
 						store.applyUserStatus(username, status);
 					}
-				}
-			} catch {
-				// ignore
-			}
-		}
-		if (event.key === 'chatHistory' && event.newValue) {
-			try {
-				const store = useChatStore();
-				// Offline používateľ správy nedostáva
-				if (store.currentUserStatus !== 'offline') {
-					store.history = JSON.parse(event.newValue);
 				}
 			} catch {
 				// ignore

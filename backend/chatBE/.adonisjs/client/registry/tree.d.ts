@@ -35,7 +35,6 @@ export interface ApiDefinition {
       invite: typeof routes['channels.channels.invite']
       revoke: typeof routes['channels.channels.revoke']
       kick: typeof routes['channels.channels.kick']
-      activity: typeof routes['channels.channels.activity']
     }
   }
 }

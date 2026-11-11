@@ -19,7 +19,6 @@ export type ScannedRoutes = {
     'channels.channels.invite': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'channels.channels.revoke': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'channels.channels.kick': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
-    'channels.channels.activity': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
   GET: {
     'profile.profile.show': { paramsTuple?: []; params?: {} }
@@ -41,7 +40,6 @@ export type ScannedRoutes = {
     'channels.channels.invite': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'channels.channels.revoke': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'channels.channels.kick': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
-    'channels.channels.activity': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
   DELETE: {
     'teams.teams.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }

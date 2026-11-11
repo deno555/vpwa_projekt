@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { createTeamValidator, joinChannelValidator, targetUserValidator } from '#validators/channel'
+import { finishAction } from '#services/action_response'
 import {
   addTeamMember,
   createTeam,
@@ -21,38 +22,43 @@ export default class TeamsController {
    * /create <nazov servera> [private]
    */
   async store({ auth, request, response }: HttpContext) {
+    const user = auth.getUserOrFail()
     const { name, type } = await request.validateUsing(createTeamValidator)
     response.status(201)
-    return createTeam(auth.getUserOrFail(), name, type)
+    return finishAction(user, await createTeam(user, name, type))
   }
 
   /**
    * /delete – zrušenie servera správcom
    */
   async destroy({ auth, params }: HttpContext) {
-    return deleteTeam(auth.getUserOrFail(), Number(params.id))
+    const user = auth.getUserOrFail()
+    return finishAction(user, await deleteTeam(user, Number(params.id)))
   }
 
   /**
    * Opustenie servera
    */
   async leave({ auth, params }: HttpContext) {
-    return leaveTeam(auth.getUserOrFail(), Number(params.id))
+    const user = auth.getUserOrFail()
+    return finishAction(user, await leaveTeam(user, Number(params.id)))
   }
 
   /**
    * Pridanie používateľa do servera
    */
   async addMember({ auth, params, request }: HttpContext) {
+    const user = auth.getUserOrFail()
     const { nickname } = await request.validateUsing(targetUserValidator)
-    return addTeamMember(auth.getUserOrFail(), Number(params.id), nickname)
+    return finishAction(user, await addTeamMember(user, Number(params.id), nickname))
   }
 
   /**
    * /join channelName [private] v rámci servera
    */
   async joinChannel({ auth, params, request }: HttpContext) {
+    const user = auth.getUserOrFail()
     const { name, type } = await request.validateUsing(joinChannelValidator)
-    return joinChannel(auth.getUserOrFail(), Number(params.id), name, type)
+    return finishAction(user, await joinChannel(user, Number(params.id), name, type))
   }
 }

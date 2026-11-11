@@ -56,7 +56,6 @@ router
         router.post(':id/invite', [controllers.Channels, 'invite'])
         router.post(':id/revoke', [controllers.Channels, 'revoke'])
         router.post(':id/kick', [controllers.Channels, 'kick'])
-        router.post(':id/activity', [controllers.Channels, 'activity'])
       })
       .prefix('channels')
       .as('channels')

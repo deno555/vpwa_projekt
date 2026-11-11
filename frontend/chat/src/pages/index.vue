@@ -456,9 +456,6 @@ import { mapStores } from 'pinia';
 import { Dialog } from 'quasar';
 import { STATUS_OPTIONS, firstChannelFor, useAuthStore, useChatStore } from '@/stores/store';
 
-// Ako často sa zoznam serverov a kanálov obnovuje z backendu
-const SERVERS_REFRESH_MS = 5000;
-
 // --- Quasar dialógy namiesto alert / confirm / prompt ---
 function showAlert(message: string, title = 'Upozornenie'): Promise<void> {
 	return new Promise((resolve) => {
@@ -573,7 +570,6 @@ export default defineComponent({
 	data() {
 		return {
 			statusOptions: STATUS_OPTIONS,
-			refreshInterval: null as ReturnType<typeof setInterval> | null,
 		};
 	},
 
@@ -584,20 +580,9 @@ export default defineComponent({
 			this.chatStore.setUserStatus(username, 'online');
 		}
 
-		// Zoznam kanálov sa pravidelne obnovuje z backendu (pozvánky, bany, zrušené
-		// a po 30 dňoch neaktivity zaniknuté kanály)
-		this.refreshInterval = setInterval(() => {
-			this.chatStore.loadServers().catch(() => {
-				// ignore – skúsi sa znova pri ďalšom obnovení
-			});
-		}, SERVERS_REFRESH_MS);
-	},
-
-	beforeUnmount() {
-		if (this.refreshInterval) {
-			clearInterval(this.refreshInterval);
-			this.refreshInterval = null;
-		}
+		// Nové správy aj zmeny zoznamu kanálov (pozvánky, bany, zrušené a po 30 dňoch
+		// neaktivity zaniknuté kanály) prichádzajú cez WebSocket
+		this.chatStore.connectRealtime();
 	},
 
 	watch: {

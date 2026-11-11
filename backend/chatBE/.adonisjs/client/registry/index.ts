@@ -96,12 +96,6 @@ const routes = {
     tokens: [{"old":"/api/v1/channels/:id/kick","type":0,"val":"api","end":""},{"old":"/api/v1/channels/:id/kick","type":0,"val":"v1","end":""},{"old":"/api/v1/channels/:id/kick","type":0,"val":"channels","end":""},{"old":"/api/v1/channels/:id/kick","type":1,"val":"id","end":""},{"old":"/api/v1/channels/:id/kick","type":0,"val":"kick","end":""}],
     types: placeholder as Registry['channels.channels.kick']['types'],
   },
-  'channels.channels.activity': {
-    methods: ["POST"],
-    pattern: '/api/v1/channels/:id/activity',
-    tokens: [{"old":"/api/v1/channels/:id/activity","type":0,"val":"api","end":""},{"old":"/api/v1/channels/:id/activity","type":0,"val":"v1","end":""},{"old":"/api/v1/channels/:id/activity","type":0,"val":"channels","end":""},{"old":"/api/v1/channels/:id/activity","type":1,"val":"id","end":""},{"old":"/api/v1/channels/:id/activity","type":0,"val":"activity","end":""}],
-    types: placeholder as Registry['channels.channels.activity']['types'],
-  },
 } as const satisfies Record<string, AdonisEndpoint>
 
 export { routes }

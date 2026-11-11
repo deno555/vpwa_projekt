@@ -180,7 +180,7 @@
 						<q-infinite-scroll
 							reverse
 							:offset="200"
-							:disable="hiddenCount === 0"
+							:disable="!hasMore"
 							class="column justify-end"
 							style="min-height: 100%"
 							@load="loadOlderMessages"
@@ -192,7 +192,7 @@
 							</template>
 
 							<div
-								v-if="hiddenCount === 0"
+								v-if="!hasMore"
 								class="text-center channel-welcome-banner q-my-md q-my-sm-xl"
 							>
 								<q-avatar
@@ -266,7 +266,7 @@
 											{{ msg.author }}
 										</span>
 										<span class="text-grey-5 text-caption"
-											>Dnes o {{ msg.time }}</span
+											>{{ msg.time }}</span
 										>
 										<q-badge
 											v-if="isMessageMentioned(msg)"
@@ -700,9 +700,6 @@ import {
 } from '@/utils/notifications';
 import type { QScrollArea } from 'quasar';
 
-// Počet správ načítaných naraz pri infinite scrolle
-const MESSAGES_PAGE_SIZE = 20;
-
 export default defineComponent({
 	name: 'ChannelPage',
 
@@ -716,13 +713,11 @@ export default defineComponent({
 			showMembers: false,
 			typingPreviewOpen: false,
 			typingPreviewUser: '',
-			// Počet najstarších správ, ktoré ešte nie sú vykreslené (dočítajú sa scrollom hore)
-			hiddenCount: 0,
 		};
 	},
 
 	created() {
-		this.resetVisibleMessages();
+		void this.openCurrentChannel();
 	},
 
 	computed: {
@@ -810,9 +805,13 @@ export default defineComponent({
 			return this.chatStore.messagesFor(this.channelName);
 		},
 
-		// Nové správy sa pridávajú na koniec, takže skryté ostávajú iba tie najstaršie
+		// Načítané správy kanála; staršie sa dočítavajú zo servera scrollom hore
 		visibleMessages() {
-			return this.currentMessages.slice(this.hiddenCount);
+			return this.currentMessages;
+		},
+
+		hasMore(): boolean {
+			return this.chatStore.hasMoreFor(this.channelName);
 		},
 
 		lastMessageId(): number | undefined {
@@ -868,7 +867,7 @@ export default defineComponent({
 			);
 			if (!match) return [];
 			const query = (match[1] || '').toLowerCase();
-			const members = this.currentChannel?.members || ['denis', 'jakub'];
+			const members = this.currentChannel?.members || [];
 			return members.filter((m) => m.toLowerCase().includes(query));
 		},
 	},
@@ -881,8 +880,15 @@ export default defineComponent({
 			}
 			this.stopTyping();
 			this.typingPreviewOpen = false;
-			this.resetVisibleMessages();
-			this.scrollToBottom();
+			void this.openCurrentChannel();
+		},
+		// Kanál sa môže objaviť až po načítaní serverov (napr. nová pozvánka)
+		'currentChannel.id'() {
+			void this.openCurrentChannel();
+		},
+		// Po pripojení do kanála je dostupná aj jeho história
+		isMember(member: boolean) {
+			if (member) void this.chatStore.openChannel(this.channelName, { force: true });
 		},
 		// Po každej novej správe (vlastnej aj cudzej) scrollneme na ňu
 		lastMessageId: {
@@ -916,24 +922,21 @@ export default defineComponent({
 	},
 
 	methods: {
-		resetVisibleMessages() {
-			this.hiddenCount = Math.max(0, this.currentMessages.length - MESSAGES_PAGE_SIZE);
+		/**
+		 * Načíta najnovšie správy otvoreného kanála zo servera (ďalšie chodia cez WebSocket).
+		 */
+		async openCurrentChannel() {
+			await this.chatStore.openChannel(this.channelName);
+			this.scrollToBottom();
 		},
 
 		/**
-		 * Dočítanie ďalšej stránky starších správ (volá q-infinite-scroll pri scrolle hore).
-		 * Pozíciu scrollu po pridaní správ navrchu dorovnáva samotný q-infinite-scroll.
+		 * Dočítanie ďalšej stránky starších správ zo servera (volá q-infinite-scroll pri
+		 * scrolle hore). Pozíciu scrollu po pridaní správ navrchu dorovnáva q-infinite-scroll.
 		 */
-		loadOlderMessages(_index: number, done: (stop?: boolean) => void) {
-			if (this.hiddenCount === 0) {
-				done(true);
-				return;
-			}
-			setTimeout(() => {
-				// simulate network delay
-				this.hiddenCount = Math.max(0, this.hiddenCount - MESSAGES_PAGE_SIZE);
-				done(this.hiddenCount === 0);
-			}, 300);
+		async loadOlderMessages(_index: number, done: (stop?: boolean) => void) {
+			const more = await this.chatStore.loadOlderMessages(this.channelName);
+			done(!more);
 		},
 
 		scrollToBottom(smooth = false) {
@@ -1038,9 +1041,9 @@ export default defineComponent({
 				return;
 			}
 
-			// Bežná správa v kanáli
-			this.chatStore.sendMessage(this.channelName, text);
+			// Bežná správa v kanáli – odošle sa cez WebSocket
 			this.newMessage = '';
+			await this.chatStore.sendMessage(this.channelName, text);
 		},
 
 		toggleMembers() {

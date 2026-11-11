@@ -8,6 +8,7 @@ import ChannelMember, { type MembershipStatus } from '#models/channel_member'
 import ChannelKickVote from '#models/channel_kick_vote'
 import User from '#models/user'
 import { fail } from '#exceptions/action_exception'
+import { teamMemberIds } from '#services/realtime'
 
 /** Kanál bez novej správy dlhšie ako 30 dní zaniká */
 export const CHANNEL_INACTIVITY_DAYS = 30
@@ -20,13 +21,17 @@ const DEFAULT_CHANNEL_NAME = 'všeobecný'
 type Visibility = 'public' | 'private'
 
 /**
- * Výsledok akcie. `announcement` je text systémovej správy do kanála
- * (správy sú zatiaľ na frontende, preto ju tam pridá klient).
+ * Výsledok akcie. Interné polia spracuje finishAction (app/services/action_response.ts):
+ * - `announcement` – systémová správa, ktorá sa uloží do kanála `channelId`
+ * - `teamId` / `notifyUserIds` – komu poslať udalosť teams:changed
  */
 export interface ActionResult {
   message: string
   channel?: string
   announcement?: string
+  channelId?: number
+  teamId?: number
+  notifyUserIds?: number[]
   [key: string]: unknown
 }
 
@@ -128,12 +133,12 @@ async function ban(channel: Channel, membership: ChannelMember) {
 
 /**
  * Zruší kanály bez novej správy dlhšie ako 30 dní, aby sa ich názov dal znova použiť.
- * @returns názvy zaniknutých kanálov
+ * @returns zaniknuté kanály
  */
 export async function removeExpiredChannels() {
   const limit = DateTime.now().minus({ days: CHANNEL_INACTIVITY_DAYS })
   const expired = await Channel.query().where('last_activity_at', '<', sqlTime(limit))
-  if (expired.length === 0) return []
+  if (expired.length === 0) return expired
 
   await Channel.query()
     .whereIn(
@@ -141,20 +146,7 @@ export async function removeExpiredChannels() {
       expired.map((c) => c.id)
     )
     .delete()
-  return expired.map((c) => c.name)
-}
-
-/**
- * Zaznamená aktivitu (novú správu) v kanáli.
- */
-export async function touchChannel(user: User, channelId: number): Promise<ActionResult> {
-  const channel = await findChannel(channelId)
-  const membership = await findMembership(channel.id, user.id)
-  if (membership?.status !== 'ACTIVE') throw fail(`Nie si členom kanála #${channel.name}.`, 403)
-
-  channel.lastActivityAt = DateTime.now()
-  await channel.save()
-  return { message: 'OK', channel: channel.name }
+  return expired
 }
 
 // --- Zoznam tímov a kanálov ---
@@ -242,8 +234,9 @@ export async function deleteTeam(user: User, teamId: number): Promise<ActionResu
   if (team.adminId !== user.id) {
     throw fail(`Iba správca servera ("${team.admin.nickname}") môže zmazať tento server.`, 403)
   }
+  const notifyUserIds = await teamMemberIds(team.id)
   await team.delete()
-  return { message: `Server "${team.name}" bol úspešne zmazaný.` }
+  return { message: `Server "${team.name}" bol úspešne zmazaný.`, notifyUserIds }
 }
 
 /**
@@ -278,7 +271,7 @@ export async function leaveTeam(user: User, teamId: number): Promise<ActionResul
     }
   })
 
-  return { message: `Opustil si server "${team.name}".` }
+  return { message: `Opustil si server "${team.name}".`, teamId: team.id, notifyUserIds: [user.id] }
 }
 
 /**
@@ -318,6 +311,8 @@ export async function addTeamMember(
   return {
     message: `Používateľ ${target.nickname} bol úspešne pridaný do tímu "${team.name}".`,
     channel: firstPublic?.name,
+    channelId: firstPublic?.id,
+    teamId: team.id,
     announcement: `Používateľ ${user.nickname} pridal používateľa ${target.nickname} do tímu "${team.name}".`,
   }
 }
@@ -345,10 +340,12 @@ export async function joinChannel(
 
   if (!existing) {
     const visibility = type ?? 'public'
-    await createChannel(teamId, user, name, visibility)
+    const created = await createChannel(teamId, user, name, visibility)
     return {
       message: `Kanál #${name} bol úspešne vytvorený a stal si sa jeho správcom.`,
       channel: name,
+      channelId: created.id,
+      teamId,
       announcement: `Používateľ ${user.nickname} vytvoril nový ${
         visibility === 'private' ? 'súkromný' : 'verejný'
       } kanál #${name}.`,
@@ -374,11 +371,18 @@ export async function joinChannel(
     return {
       message: `Pripojil si sa do kanála #${existing.name}.`,
       channel: existing.name,
+      channelId: existing.id,
+      teamId,
       announcement: `Používateľ ${user.nickname} sa pripojil do kanála #${existing.name}.`,
     }
   }
 
-  return { message: `Pripojil si sa do kanála #${existing.name}.`, channel: existing.name }
+  return {
+    message: `Pripojil si sa do kanála #${existing.name}.`,
+    channel: existing.name,
+    channelId: existing.id,
+    teamId,
+  }
 }
 
 /**
@@ -392,6 +396,8 @@ export async function leaveChannel(user: User, channelId: number): Promise<Actio
     return {
       message: `Ako správca si zrušil svoje členstvo, preto kanál #${channel.name} zanikol.`,
       channel: channel.name,
+      channelId: channel.id,
+      teamId: channel.teamId,
       deleted: true,
     }
   }
@@ -405,6 +411,8 @@ export async function leaveChannel(user: User, channelId: number): Promise<Actio
   return {
     message: `Zrušil si svoje členstvo v kanáli #${channel.name}.`,
     channel: channel.name,
+    channelId: channel.id,
+    teamId: channel.teamId,
     deleted: false,
     announcement: `Používateľ ${user.nickname} zrušil svoje členstvo v kanáli #${channel.name}.`,
   }
@@ -422,6 +430,8 @@ export async function deleteChannelByAdmin(user: User, channelId: number): Promi
   return {
     message: `Kanál #${channel.name} bol zrušený správcom.`,
     channel: channel.name,
+    channelId: channel.id,
+    teamId: channel.teamId,
     deleted: true,
   }
 }
@@ -471,6 +481,8 @@ export async function inviteToChannel(
       return {
         message: `Prístup do kanála #${channel.name} pre používateľa ${target.nickname} bol úspešne obnovený.`,
         channel: channel.name,
+        channelId: channel.id,
+        teamId: channel.teamId,
         announcement: `Správca ${user.nickname} obnovil prístup používateľovi ${target.nickname} do kanála #${channel.name}.`,
       }
     }
@@ -486,6 +498,8 @@ export async function inviteToChannel(
   return {
     message: `Používateľ ${target.nickname} bol pozvaný do ${isPrivate ? 'súkromného ' : ''}kanála #${channel.name}.`,
     channel: channel.name,
+    channelId: channel.id,
+    teamId: channel.teamId,
     announcement: isPrivate
       ? `Správca ${user.nickname} pozval používateľa ${target.nickname} do súkromného kanála #${channel.name}.`
       : `Používateľ ${user.nickname} pozval ${target.nickname} do kanála #${channel.name}.`,
@@ -522,6 +536,8 @@ export async function revokeFromChannel(
   return {
     message: `Používateľovi ${target.nickname} bol odobraný prístup do kanála #${channel.name}.`,
     channel: channel.name,
+    channelId: channel.id,
+    teamId: channel.teamId,
     announcement: `Správca ${user.nickname} odobral prístup používateľovi ${target.nickname} zo súkromného kanála #${channel.name}.`,
   }
 }
@@ -562,6 +578,8 @@ export async function kickFromChannel(
     return {
       message: `Používateľ ${target.nickname} bol natrvalo vyhodený správcom.`,
       channel: channel.name,
+      channelId: channel.id,
+      teamId: channel.teamId,
       announcement: `Správca ${user.nickname} vyhodil používateľa ${target.nickname} natrvalo (trvalý ban).`,
     }
   }
@@ -585,6 +603,8 @@ export async function kickFromChannel(
     return {
       message: `Používateľ ${target.nickname} bol vyhodený (${KICK_VOTES_FOR_BAN} hlasy dosiahnuté) a má trvalý ban.`,
       channel: channel.name,
+      channelId: channel.id,
+      teamId: channel.teamId,
       announcement: `Používateľ ${target.nickname} bol vyhodený na základe ${KICK_VOTES_FOR_BAN} hlasov členov a dostal trvalý ban pre kanál #${channel.name}.`,
     }
   }
@@ -592,6 +612,8 @@ export async function kickFromChannel(
   return {
     message: `Hlas za vyhodenie používateľa ${target.nickname} bol zaznamenaný (${voteCount}/${KICK_VOTES_FOR_BAN}).`,
     channel: channel.name,
+    channelId: channel.id,
+    teamId: channel.teamId,
     announcement: `Používateľ ${user.nickname} hlasoval za vyhodenie ${target.nickname} (${voteCount}/${KICK_VOTES_FOR_BAN}).`,
   }
 }

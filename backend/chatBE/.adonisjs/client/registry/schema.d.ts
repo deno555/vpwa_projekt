@@ -187,16 +187,4 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/channels_controller').default['kick']>>> | { status: 422; response: { errors: SimpleError[] } }
     }
   }
-  'channels.channels.activity': {
-    methods: ["POST"]
-    pattern: '/api/v1/channels/:id/activity'
-    types: {
-      body: {}
-      paramsTuple: [ParamValue]
-      params: { id: ParamValue }
-      query: {}
-      response: ExtractResponse<Awaited<ReturnType<import('#controllers/channels_controller').default['activity']>>>
-      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/channels_controller').default['activity']>>>
-    }
-  }
 }

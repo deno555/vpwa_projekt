@@ -13,6 +13,7 @@ export interface ApiDefinition {
   profile: {
     profile: {
       show: typeof routes['profile.profile.show']
+      updateStatus: typeof routes['profile.profile.update_status']
     }
     accessTokens: {
       destroy: typeof routes['profile.access_tokens.destroy']

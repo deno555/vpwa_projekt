@@ -7,6 +7,7 @@ export type ScannedRoutes = {
     'auth.new_account.store': { paramsTuple?: []; params?: {} }
     'auth.access_tokens.store': { paramsTuple?: []; params?: {} }
     'profile.profile.show': { paramsTuple?: []; params?: {} }
+    'profile.profile.update_status': { paramsTuple?: []; params?: {} }
     'profile.access_tokens.destroy': { paramsTuple?: []; params?: {} }
     'teams.teams.index': { paramsTuple?: []; params?: {} }
     'teams.teams.store': { paramsTuple?: []; params?: {} }
@@ -40,6 +41,9 @@ export type ScannedRoutes = {
     'channels.channels.invite': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'channels.channels.revoke': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'channels.channels.kick': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+  }
+  PATCH: {
+    'profile.profile.update_status': { paramsTuple?: []; params?: {} }
   }
   DELETE: {
     'teams.teams.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
